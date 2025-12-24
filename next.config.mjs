@@ -7,6 +7,26 @@ const nextConfig = {
     unoptimized: true,
   },
   async headers() {
+
+    const csp = [
+      "default-src 'self'",
+      // você já está permitindo eval/inline; mantenho como estava
+      "script-src 'self' 'unsafe-eval' 'unsafe-inline'",
+      // ✅ necessário para workers do three/drei
+      "worker-src 'self' blob:",
+      // alguns browsers ainda usam child-src p/ workers/iframes
+      "child-src 'self' blob:",
+      // ✅ liberar chamadas externas (HDRI + Supabase + Brapi)
+      "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://brapi.dev https://raw.githack.com",
+      // (recomendado) imagens e blobs
+      "img-src 'self' data: blob: https:",
+      "style-src 'self' 'unsafe-inline'",
+      "font-src 'self' data: https:",
+      // se você usa <canvas> / WebGL
+      "media-src 'self' blob: https:",
+      "frame-ancestors 'self'",
+    ].join("; ")
+    
     return [
       {
         source: "/(.*)",
