@@ -1,0 +1,263 @@
+"use client"
+
+import type React from "react"
+
+import { useState, useTransition } from "react"
+import { Button } from "@/components/ui/button"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { Plus, Loader2 } from "lucide-react"
+import { createClient } from "@/lib/supabase/client"
+import { useRouter } from "next/navigation"
+import { TIPOS_RENDA_FIXA, INDEXADORES } from "@/lib/api/brapi"
+
+export function AddRendaFixaDialog() {
+  const [open, setOpen] = useState(false)
+  const [isPending, startTransition] = useTransition()
+  const router = useRouter()
+
+  const [formData, setFormData] = useState({
+    nome: "",
+    tipo: "cdb" as keyof typeof TIPOS_RENDA_FIXA,
+    instituicao: "",
+    valor_investido: "",
+    valor_atual: "",
+    taxa: "",
+    indexador: "cdi" as keyof typeof INDEXADORES | "",
+    data_aplicacao: new Date().toISOString().split("T")[0],
+    data_vencimento: "",
+    liquidez: "vencimento" as "diaria" | "vencimento" | "carencia",
+    dias_carencia: "",
+    observacoes: "",
+  })
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+
+    const supabase = createClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+
+    if (!user) return
+
+    const valorInvestido = Number.parseFloat(formData.valor_investido)
+    const valorAtual = formData.valor_atual ? Number.parseFloat(formData.valor_atual) : valorInvestido
+
+    await supabase.from("renda_fixa").insert({
+      user_id: user.id,
+      nome: formData.nome,
+      tipo: formData.tipo,
+      instituicao: formData.instituicao,
+      valor_investido: valorInvestido,
+      valor_atual: valorAtual,
+      taxa: Number.parseFloat(formData.taxa),
+      indexador: formData.indexador || null,
+      data_aplicacao: formData.data_aplicacao,
+      data_vencimento: formData.data_vencimento || null,
+      liquidez: formData.liquidez,
+      dias_carencia: formData.dias_carencia ? Number.parseInt(formData.dias_carencia) : null,
+      observacoes: formData.observacoes || null,
+    })
+
+    setOpen(false)
+    setFormData({
+      nome: "",
+      tipo: "cdb",
+      instituicao: "",
+      valor_investido: "",
+      valor_atual: "",
+      taxa: "",
+      indexador: "cdi",
+      data_aplicacao: new Date().toISOString().split("T")[0],
+      data_vencimento: "",
+      liquidez: "vencimento",
+      dias_carencia: "",
+      observacoes: "",
+    })
+
+    startTransition(() => {
+      router.refresh()
+    })
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={setOpen}>
+      <DialogTrigger asChild>
+        <Button className="gap-2 neon-glow">
+          <Plus className="h-4 w-4" />
+          Adicionar Aplicacao
+        </Button>
+      </DialogTrigger>
+      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[90vh] overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle className="neon-text">Adicionar Aplicacao de Renda Fixa</DialogTitle>
+        </DialogHeader>
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="nome">Nome da Aplicacao *</Label>
+              <Input
+                id="nome"
+                placeholder="Ex: CDB Banco Inter 110% CDI"
+                value={formData.nome}
+                onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="tipo">Tipo *</Label>
+              <Select value={formData.tipo} onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as any }))}>
+                <SelectTrigger className="border-primary/20 bg-background/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  {Object.entries(TIPOS_RENDA_FIXA).map(([key, { label }]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instituicao">Instituicao *</Label>
+              <Input
+                id="instituicao"
+                placeholder="Ex: Banco Inter, XP, BTG..."
+                value={formData.instituicao}
+                onChange={(e) => setFormData((prev) => ({ ...prev, instituicao: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="valor_investido">Valor Investido (R$) *</Label>
+              <Input
+                id="valor_investido"
+                type="number"
+                step="0.01"
+                placeholder="0,00"
+                value={formData.valor_investido}
+                onChange={(e) => setFormData((prev) => ({ ...prev, valor_investido: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="valor_atual">Valor Atual (R$)</Label>
+              <Input
+                id="valor_atual"
+                type="number"
+                step="0.01"
+                placeholder="Igual ao investido se vazio"
+                value={formData.valor_atual}
+                onChange={(e) => setFormData((prev) => ({ ...prev, valor_atual: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="taxa">Taxa (%) *</Label>
+              <Input
+                id="taxa"
+                type="number"
+                step="0.01"
+                placeholder="Ex: 110"
+                value={formData.taxa}
+                onChange={(e) => setFormData((prev) => ({ ...prev, taxa: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="indexador">Indexador</Label>
+              <Select
+                value={formData.indexador}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as any }))}
+              >
+                <SelectTrigger className="border-primary/20 bg-background/50">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  {Object.entries(INDEXADORES).map(([key, { label }]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="data_aplicacao">Data Aplicacao *</Label>
+              <Input
+                id="data_aplicacao"
+                type="date"
+                value={formData.data_aplicacao}
+                onChange={(e) => setFormData((prev) => ({ ...prev, data_aplicacao: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="data_vencimento">Data Vencimento</Label>
+              <Input
+                id="data_vencimento"
+                type="date"
+                value={formData.data_vencimento}
+                onChange={(e) => setFormData((prev) => ({ ...prev, data_vencimento: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="liquidez">Liquidez</Label>
+              <Select
+                value={formData.liquidez}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, liquidez: v as any }))}
+              >
+                <SelectTrigger className="border-primary/20 bg-background/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  <SelectItem value="diaria">Diaria</SelectItem>
+                  <SelectItem value="vencimento">No Vencimento</SelectItem>
+                  <SelectItem value="carencia">Com Carencia</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.liquidez === "carencia" && (
+              <div className="space-y-2">
+                <Label htmlFor="dias_carencia">Dias de Carencia</Label>
+                <Input
+                  id="dias_carencia"
+                  type="number"
+                  placeholder="Ex: 90"
+                  value={formData.dias_carencia}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, dias_carencia: e.target.value }))}
+                  className="border-primary/20 bg-background/50"
+                />
+              </div>
+            )}
+          </div>
+
+          <Button type="submit" className="w-full neon-glow" disabled={isPending}>
+            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Adicionar Aplicacao
+          </Button>
+        </form>
+      </DialogContent>
+    </Dialog>
+  )
+}
