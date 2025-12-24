@@ -23,3 +23,12 @@ export function getCurrentMonthRange(): { start: string; end: string } {
     end: end.toISOString().split("T")[0],
   }
 }
+
+export function getMonthRangeFromDate(date: Date): { start: string; end: string } {
+  const start = new Date(date.getFullYear(), date.getMonth(), 1)
+  const end = new Date(date.getFullYear(), date.getMonth() + 1, 0)
+  return {
+    start: start.toISOString().split("T")[0],
+    end: end.toISOString().split("T")[0],
+  }
+}

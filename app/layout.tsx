@@ -2,6 +2,7 @@ import type React from "react"
 import type { Metadata, Viewport } from "next"
 import { Inter } from "next/font/google"
 import "./globals.css"
+import { ThemeProvider } from "@/components/providers/theme-provider"
 
 const inter = Inter({ subsets: ["latin"] })
 
@@ -45,7 +46,11 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="pt-BR" suppressHydrationWarning>
-      <body className={`font-sans antialiased ${inter.className}`}>{children}</body>
+      <body className={`font-sans antialiased ${inter.className}`}>
+        <ThemeProvider defaultTheme="dark" storageKey="fincontrol-theme">
+          {children}
+        </ThemeProvider>
+      </body>
     </html>
   )
 }
