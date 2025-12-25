@@ -6,9 +6,9 @@ const BRAPI_TOKEN = process.env.BRAPI_TOKEN || ""
 
 export interface CryptoQuote {
   coin: string
+  coinName: string
   currency: string
   currencyRateFromUSD: number
-  coinName: string
   regularMarketPrice: number
   regularMarketDayHigh: number
   regularMarketDayLow: number
@@ -27,10 +27,13 @@ export interface CryptoResponse {
   took: string
 }
 
-export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "BRL"): Promise<CryptoQuote | null> {
+export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "USD"): Promise<CryptoQuote | null> {
   try {
-    const url = `${BRAPI_BASE_URL}/v2/crypto?coin=${coin}&currency=${currency}`
-    console.log(`[v0] Fetching crypto: ${coin} in ${currency}`)
+    // Remove any suffix like -USD or -BRL
+    const cleanCoin = coin.replace(/-USD|-BRL/gi, "").toUpperCase()
+    const url = `${BRAPI_BASE_URL}/v2/crypto?coin=${cleanCoin}&currency=${currency}`
+
+    console.log(`[v0] Fetching crypto from Brapi v2: ${cleanCoin} in ${currency}`)
 
     const response = await fetch(url, {
       cache: "no-store",
@@ -42,18 +45,20 @@ export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "
     })
 
     if (!response.ok) {
+      const errorText = await response.text()
       console.error(`[v0] Brapi Crypto API error: ${response.status} ${response.statusText}`)
+      console.error(`[v0] Error response:`, errorText)
       return null
     }
 
     const data: CryptoResponse = await response.json()
 
     if (!data.coins || data.coins.length === 0) {
-      console.error(`[v0] No crypto data found for ${coin}`)
+      console.error(`[v0] No crypto data found for ${cleanCoin}`)
       return null
     }
 
-    console.log(`[v0] Got crypto quote for ${coin}: ${data.coins[0].regularMarketPrice}`)
+    console.log(`[v0] Got crypto quote for ${cleanCoin}: ${data.coins[0].regularMarketPrice} ${currency}`)
     return data.coins[0]
   } catch (error) {
     console.error(`[v0] Crypto API error for ${coin}:`, error)
@@ -75,14 +80,15 @@ export async function getAvailableCryptos(): Promise<string[]> {
     })
 
     if (!response.ok) {
-      return []
+      console.log("[v0] Using fallback crypto list")
+      return POPULAR_CRYPTOS
     }
 
     const data = await response.json()
-    return data.coins || []
+    return data.coins || POPULAR_CRYPTOS
   } catch (error) {
     console.error("[v0] Error fetching available cryptos:", error)
-    return []
+    return POPULAR_CRYPTOS
   }
 }
 
@@ -92,14 +98,14 @@ export async function searchCryptos(query: string): Promise<{ symbol: string; na
 
   return filtered.slice(0, 20).map((c) => ({
     symbol: c,
-    name: c.toUpperCase(),
+    name: `${c} (${c.toUpperCase()})`,
   }))
 }
 
 export async function getCryptoHistorica(
   coin: string,
   date: string,
-  currency: "BRL" | "USD" = "BRL",
+  currency: "BRL" | "USD" = "USD",
 ): Promise<number | null> {
   try {
     console.log(`[v0] Fetching historical crypto price for ${coin} on ${date} in ${currency}`)
@@ -117,8 +123,15 @@ export async function getCryptoHistorica(
       }
     }
 
-    // For older dates, return null (Brapi doesn't provide historical crypto data in free tier)
-    console.log(`[v0] Historical crypto data not available for date ${date}`)
+    // For older dates, Brapi doesn't provide historical crypto data
+    // Try current price as fallback
+    console.log(`[v0] Historical crypto data not available, trying current price`)
+    const currentQuote = await getCryptoCotacao(coin, currency)
+    if (currentQuote) {
+      console.log(`[v0] Using current price as fallback: ${currentQuote.regularMarketPrice}`)
+      return currentQuote.regularMarketPrice
+    }
+
     return null
   } catch (error) {
     console.error(`[v0] Error fetching historical crypto price:`, error)

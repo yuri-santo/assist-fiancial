@@ -20,7 +20,26 @@ export interface UnifiedQuote {
 async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Promise<UnifiedQuote | null> {
   try {
     console.log(`[v0] Trying CoinGecko for ${ticker}`)
-    const coinId = ticker.toLowerCase()
+
+    // Map common crypto tickers to CoinGecko IDs
+    const coinIdMap: Record<string, string> = {
+      BTC: "bitcoin",
+      ETH: "ethereum",
+      BNB: "binancecoin",
+      XRP: "ripple",
+      ADA: "cardano",
+      DOGE: "dogecoin",
+      SOL: "solana",
+      DOT: "polkadot",
+      MATIC: "matic-network",
+      LTC: "litecoin",
+      SHIB: "shiba-inu",
+      AVAX: "avalanche-2",
+      UNI: "uniswap",
+      LINK: "chainlink",
+    }
+
+    const coinId = coinIdMap[ticker.toUpperCase()] || ticker.toLowerCase()
     const vsCurrency = currency.toLowerCase()
     const url = `${COINGECKO_API}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}&include_24hr_change=true`
 
@@ -93,11 +112,10 @@ export async function getUnifiedQuote(
   assetType: "stock" | "crypto",
   currency: "BRL" | "USD" = "BRL",
 ): Promise<UnifiedQuote | null> {
-  console.log(`[v0] Fetching unified quote for ${ticker} (${assetType})`)
+  console.log(`[v0] Fetching unified quote for ${ticker} (${assetType}) in ${currency}`)
 
   // Para criptomoedas
   if (assetType === "crypto") {
-    // Tenta Brapi primeiro
     const brapiQuote = await getCryptoCotacao(ticker, currency)
     if (brapiQuote) {
       return {
@@ -111,11 +129,11 @@ export async function getUnifiedQuote(
       }
     }
 
-    // Fallback para CoinGecko
+    console.log(`[v0] Brapi failed, trying CoinGecko for ${ticker}`)
     const geckoQuote = await fetchFromCoinGecko(ticker, currency)
     if (geckoQuote) return geckoQuote
 
-    console.error(`[v0] No crypto quote found for ${ticker}`)
+    console.error(`[v0] No crypto quote found for ${ticker} from any source`)
     return null
   }
 
@@ -138,7 +156,7 @@ export async function getUnifiedQuote(
   const alphaQuote = await fetchFromAlphaVantage(ticker)
   if (alphaQuote) return alphaQuote
 
-  console.error(`[v0] No quote found for ${ticker}`)
+  console.error(`[v0] No quote found for ${ticker} from any source`)
   return null
 }
 
