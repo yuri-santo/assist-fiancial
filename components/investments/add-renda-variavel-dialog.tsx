@@ -3,7 +3,14 @@
 import type React from "react"
 import { useState, useTransition, useEffect, useCallback } from "react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -23,6 +30,7 @@ export function AddRendaVariavelDialog() {
   const [cotacaoAtual, setCotacaoAtual] = useState<number | null>(null)
   const [variacao, setVariacao] = useState<number | null>(null)
   const [isLoadingCotacao, setIsLoadingCotacao] = useState(false)
+  const [apiError, setApiError] = useState<string | null>(null)
   const router = useRouter()
 
   const [formData, setFormData] = useState({
@@ -44,8 +52,13 @@ export function AddRendaVariavelDialog() {
       return
     }
     setIsSearching(true)
-    const results = await searchAtivos(searchQuery)
-    setSearchResults(results)
+    setApiError(null)
+    try {
+      const results = await searchAtivos(searchQuery)
+      setSearchResults(results)
+    } catch {
+      setApiError("Erro ao buscar ativos. Tente digitar o ticker manualmente.")
+    }
     setIsSearching(false)
   }, [searchQuery])
 
@@ -54,7 +67,7 @@ export function AddRendaVariavelDialog() {
       if (searchQuery.length >= 2) {
         handleSearch()
       }
-    }, 300)
+    }, 500)
     return () => clearTimeout(timer)
   }, [searchQuery, handleSearch])
 
@@ -68,6 +81,7 @@ export function AddRendaVariavelDialog() {
   const fetchCotacao = async (ticker: string) => {
     if (!ticker) return
     setIsLoadingCotacao(true)
+    setApiError(null)
     try {
       const cotacao = await getCotacao(ticker.toUpperCase())
       if (cotacao) {
@@ -80,10 +94,12 @@ export function AddRendaVariavelDialog() {
       } else {
         setCotacaoAtual(null)
         setVariacao(null)
+        setApiError("Nao foi possivel obter cotacao. Digite o preco manualmente.")
       }
     } catch {
       setCotacaoAtual(null)
       setVariacao(null)
+      setApiError("Erro na API. Digite o preco manualmente.")
     }
     setIsLoadingCotacao(false)
   }
@@ -127,6 +143,7 @@ export function AddRendaVariavelDialog() {
     })
     setCotacaoAtual(null)
     setVariacao(null)
+    setApiError(null)
 
     startTransition(() => {
       router.refresh()
@@ -141,12 +158,21 @@ export function AddRendaVariavelDialog() {
           Adicionar Ativo
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[90vh] fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col p-0 z-50">
+      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[85vh] fixed top-[10%] left-1/2 -translate-x-1/2 translate-y-0 flex flex-col p-0 z-[100]">
         <DialogHeader className="p-6 pb-0 shrink-0">
           <DialogTitle className="neon-text">Adicionar Ativo de Renda Variável</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Preencha os dados do ativo para adicionar a sua carteira
+          </DialogDescription>
         </DialogHeader>
         <ScrollArea className="flex-1 px-6 pb-6">
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
+            {apiError && (
+              <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+                {apiError}
+              </div>
+            )}
+
             <div className="space-y-2">
               <Label>Buscar Ativo</Label>
               <div className="relative">
@@ -237,7 +263,7 @@ export function AddRendaVariavelDialog() {
                   <SelectTrigger className="border-primary/20 bg-background/50">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20">
+                  <SelectContent className="glass-card border-primary/20 z-[200]">
                     {Object.entries(TIPOS_RENDA_VARIAVEL).map(([key, { label }]) => (
                       <SelectItem key={key} value={key}>
                         {label}
@@ -256,7 +282,7 @@ export function AddRendaVariavelDialog() {
                   <SelectTrigger className="border-primary/20 bg-background/50">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20">
+                  <SelectContent className="glass-card border-primary/20 z-[200]">
                     {Object.entries(MOEDAS).map(([key, { label }]) => (
                       <SelectItem key={key} value={key}>
                         {label}
@@ -275,7 +301,7 @@ export function AddRendaVariavelDialog() {
                   <SelectTrigger className="border-primary/20 bg-background/50">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20">
+                  <SelectContent className="glass-card border-primary/20 z-[200]">
                     {Object.entries(MERCADOS).map(([key, { label }]) => (
                       <SelectItem key={key} value={key}>
                         {label}
@@ -305,13 +331,12 @@ export function AddRendaVariavelDialog() {
                   id="preco_medio"
                   type="number"
                   step="0.01"
-                  placeholder="Preenchido automaticamente"
+                  placeholder="Digite ou busque cotacao"
                   value={formData.preco_medio}
                   onChange={(e) => setFormData((prev) => ({ ...prev, preco_medio: e.target.value }))}
                   className="border-primary/20 bg-background/50"
                   required
                 />
-                <p className="text-xs text-muted-foreground">Preenchido ao buscar cotação</p>
               </div>
 
               <div className="space-y-2">
@@ -343,7 +368,7 @@ export function AddRendaVariavelDialog() {
                   <SelectTrigger className="border-primary/20 bg-background/50">
                     <SelectValue placeholder="Selecione o setor" />
                   </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20">
+                  <SelectContent className="glass-card border-primary/20 z-[200]">
                     {SETORES.map((setor) => (
                       <SelectItem key={setor} value={setor}>
                         {setor}

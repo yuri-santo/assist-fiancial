@@ -1,11 +1,11 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Card, CardContent } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -16,10 +16,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { MoreVertical, Pencil, Trash, Target, Plus } from "lucide-react"
+import { MoreVertical, Pencil, Trash, Target, Plus, PiggyBank } from "lucide-react"
 import { formatCurrency } from "@/lib/utils/currency"
 import { formatDate } from "@/lib/utils/date"
-import type { Objetivo } from "@/lib/types"
+import type { Objetivo, Caixinha } from "@/lib/types"
 import { GoalForm } from "@/components/forms/goal-form"
 import { AddToGoalDialog } from "@/components/goals/add-to-goal-dialog"
 import { createClient } from "@/lib/supabase/client"
@@ -35,11 +35,24 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
   const [editing, setEditing] = useState(false)
   const [deleting, setDeleting] = useState(false)
   const [adding, setAdding] = useState(false)
+  const [caixinhasVinculadas, setCaixinhasVinculadas] = useState<Caixinha[]>([])
+
+  useEffect(() => {
+    const fetchCaixinhas = async () => {
+      const supabase = createClient()
+      const { data } = await supabase.from("caixinhas").select("*").eq("objetivo_id", objetivo.id)
+      if (data) {
+        setCaixinhasVinculadas(data as Caixinha[])
+      }
+    }
+    fetchCaixinhas()
+  }, [objetivo.id])
 
   const porcentagem = (objetivo.valor_atual / objetivo.valor_total) * 100
   const falta = objetivo.valor_total - objetivo.valor_atual
 
-  // Calculate monthly savings needed
+  const totalCaixinhas = caixinhasVinculadas.reduce((sum, c) => sum + c.saldo, 0)
+
   let mensalNecessario = 0
   if (objetivo.prazo && falta > 0) {
     const prazoDate = new Date(objetivo.prazo)
@@ -60,7 +73,7 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
 
   return (
     <>
-      <Card className="overflow-hidden">
+      <Card className="overflow-hidden glass-card hover:border-primary/30 transition-colors">
         <div className="h-2" style={{ backgroundColor: objetivo.cor }} />
         <CardContent className="p-4">
           <div className="flex items-start justify-between">
@@ -82,16 +95,16 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
                   <MoreVertical className="h-4 w-4" />
                 </Button>
               </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setAdding(true)}>
+              <DropdownMenuContent align="end" className="glass-card border-primary/20">
+                <DropdownMenuItem onClick={() => setAdding(true)} className="cursor-pointer">
                   <Plus className="mr-2 h-4 w-4" />
                   Adicionar valor
                 </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setEditing(true)}>
+                <DropdownMenuItem onClick={() => setEditing(true)} className="cursor-pointer">
                   <Pencil className="mr-2 h-4 w-4" />
                   Editar
                 </DropdownMenuItem>
-                <DropdownMenuItem className="text-destructive" onClick={() => setDeleting(true)}>
+                <DropdownMenuItem className="text-destructive cursor-pointer" onClick={() => setDeleting(true)}>
                   <Trash className="mr-2 h-4 w-4" />
                   Excluir
                 </DropdownMenuItem>
@@ -120,6 +133,25 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
               </div>
             </div>
 
+            {caixinhasVinculadas.length > 0 && (
+              <div className="rounded-lg bg-primary/5 p-2 border border-primary/10">
+                <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
+                  <PiggyBank className="h-3 w-3" />
+                  <span>Caixinhas vinculadas:</span>
+                </div>
+                {caixinhasVinculadas.map((c) => (
+                  <div key={c.id} className="flex justify-between text-xs">
+                    <span>{c.nome}</span>
+                    <span className="font-medium">{formatCurrency(c.saldo)}</span>
+                  </div>
+                ))}
+                <div className="flex justify-between text-xs mt-1 pt-1 border-t border-primary/10">
+                  <span className="font-medium">Total</span>
+                  <span className="font-medium text-primary">{formatCurrency(totalCaixinhas)}</span>
+                </div>
+              </div>
+            )}
+
             {falta > 0 && (
               <div className="rounded-lg bg-muted p-3 text-sm">
                 <p className="text-muted-foreground">Falta {formatCurrency(falta)}</p>
@@ -142,18 +174,24 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
       </Card>
 
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent>
+        <DialogContent className="glass-card border-primary/20 fixed top-[15%] left-1/2 -translate-x-1/2 translate-y-0 z-[100]">
           <DialogHeader>
             <DialogTitle>Editar Objetivo</DialogTitle>
+            <DialogDescription>Atualize as informacoes do seu objetivo</DialogDescription>
           </DialogHeader>
           <GoalForm userId={userId} objetivo={objetivo} onSuccess={() => setEditing(false)} />
         </DialogContent>
       </Dialog>
 
-      <AddToGoalDialog objetivo={objetivo} open={adding} onOpenChange={setAdding} />
+      <AddToGoalDialog
+        objetivo={objetivo}
+        caixinhasVinculadas={caixinhasVinculadas}
+        open={adding}
+        onOpenChange={setAdding}
+      />
 
       <AlertDialog open={deleting} onOpenChange={setDeleting}>
-        <AlertDialogContent>
+        <AlertDialogContent className="glass-card border-primary/20">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir objetivo?</AlertDialogTitle>
             <AlertDialogDescription>Esta acao nao pode ser desfeita.</AlertDialogDescription>

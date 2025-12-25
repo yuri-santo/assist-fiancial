@@ -3,7 +3,14 @@
 import type React from "react"
 import { useState, useTransition, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
@@ -14,8 +21,8 @@ import { TIPOS_RENDA_FIXA, INDEXADORES } from "@/lib/api/brapi"
 import { formatCurrency } from "@/lib/utils/currency"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
-const CDI_ATUAL = 10.65 // % a.a.
-const IPCA_ATUAL = 4.5 // % a.a.
+const CDI_ATUAL = 10.65
+const IPCA_ATUAL = 4.5
 
 export function AddRendaFixaDialog() {
   const [open, setOpen] = useState(false)
@@ -120,6 +127,35 @@ export function AddRendaFixaDialog() {
     })
   }
 
+  const getTaxaLabel = () => {
+    switch (formData.indexador) {
+      case "cdi":
+        return "Taxa (% do CDI) *"
+      case "selic":
+        return "Taxa (% da Selic) *"
+      case "ipca":
+        return "Taxa (% + IPCA) *"
+      case "prefixado":
+        return "Taxa (% a.a.) *"
+      default:
+        return "Taxa (%) *"
+    }
+  }
+
+  const getTaxaPlaceholder = () => {
+    switch (formData.indexador) {
+      case "cdi":
+      case "selic":
+        return "Ex: 110 para 110%"
+      case "ipca":
+        return "Ex: 5.5 para IPCA + 5,5%"
+      case "prefixado":
+        return "Ex: 12.5 para 12,5% a.a."
+      default:
+        return "Ex: 10"
+    }
+  }
+
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger asChild>
@@ -128,9 +164,12 @@ export function AddRendaFixaDialog() {
           Adicionar Aplicação
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[90vh] fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col p-0 z-50">
+      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[85vh] fixed top-[10%] left-1/2 -translate-x-1/2 translate-y-0 flex flex-col p-0 z-[100]">
         <DialogHeader className="p-6 pb-0 shrink-0">
           <DialogTitle className="neon-text">Adicionar Aplicação de Renda Fixa</DialogTitle>
+          <DialogDescription className="text-muted-foreground">
+            Preencha os dados da aplicacao incluindo a taxa de juros
+          </DialogDescription>
         </DialogHeader>
         <ScrollArea className="flex-1 px-6 pb-6">
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
@@ -156,7 +195,7 @@ export function AddRendaFixaDialog() {
                   <SelectTrigger className="border-primary/20 bg-background/50">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20">
+                  <SelectContent className="glass-card border-primary/20 z-[200]">
                     {Object.entries(TIPOS_RENDA_FIXA).map(([key, { label }]) => (
                       <SelectItem key={key} value={key}>
                         {label}
@@ -210,11 +249,12 @@ export function AddRendaFixaDialog() {
                 <Select
                   value={formData.indexador}
                   onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as any }))}
+                  required
                 >
                   <SelectTrigger className="border-primary/20 bg-background/50">
                     <SelectValue placeholder="Selecione" />
                   </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20">
+                  <SelectContent className="glass-card border-primary/20 z-[200]">
                     {Object.entries(INDEXADORES).map(([key, { label }]) => (
                       <SelectItem key={key} value={key}>
                         {label}
@@ -225,29 +265,22 @@ export function AddRendaFixaDialog() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="taxa">
-                  Taxa{" "}
-                  {formData.indexador === "cdi" || formData.indexador === "selic"
-                    ? "(% do indexador)"
-                    : formData.indexador === "ipca"
-                      ? "(% + IPCA)"
-                      : "(% a.a.)"}{" "}
-                  *
-                </Label>
+                <Label htmlFor="taxa">{getTaxaLabel()}</Label>
                 <Input
                   id="taxa"
                   type="number"
                   step="0.01"
-                  placeholder={formData.indexador === "cdi" ? "Ex: 110" : "Ex: 5.5"}
+                  placeholder={getTaxaPlaceholder()}
                   value={formData.taxa}
                   onChange={(e) => setFormData((prev) => ({ ...prev, taxa: e.target.value }))}
                   className="border-primary/20 bg-background/50"
                   required
                 />
                 <p className="text-xs text-muted-foreground">
-                  {formData.indexador === "cdi" && "Ex: 110 para 110% do CDI"}
-                  {formData.indexador === "ipca" && "Ex: 5.5 para IPCA + 5,5%"}
-                  {formData.indexador === "prefixado" && "Ex: 12.5 para 12,5% a.a."}
+                  {formData.indexador === "cdi" && "Digite 110 para 110% do CDI"}
+                  {formData.indexador === "ipca" && "Digite 5.5 para IPCA + 5,5%"}
+                  {formData.indexador === "prefixado" && "Digite 12.5 para 12,5% a.a."}
+                  {formData.indexador === "selic" && "Digite 100 para 100% da Selic"}
                 </p>
               </div>
 
@@ -283,7 +316,7 @@ export function AddRendaFixaDialog() {
                   <SelectTrigger className="border-primary/20 bg-background/50">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20">
+                  <SelectContent className="glass-card border-primary/20 z-[200]">
                     <SelectItem value="diaria">Diária</SelectItem>
                     <SelectItem value="vencimento">No Vencimento</SelectItem>
                     <SelectItem value="carencia">Com Carência</SelectItem>
