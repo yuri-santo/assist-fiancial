@@ -14,10 +14,11 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Plus, Loader2, Search, RefreshCw, TrendingUp, TrendingDown } from "lucide-react"
+import { Plus, Loader2, Search, RefreshCw, TrendingUp, TrendingDown, DollarSign, Calculator } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, MERCADOS, searchAtivos, getCotacao } from "@/lib/api/brapi"
+import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, type MERCADOS, searchAtivos, getCotacao } from "@/lib/api/brapi"
+import { getCryptoCotacao, searchCryptos } from "@/lib/api/crypto-service"
 import { formatCurrency } from "@/lib/utils/currency"
 
 export function AddRendaVariavelDialog() {
@@ -38,6 +39,7 @@ export function AddRendaVariavelDialog() {
     tipo: "acao" as keyof typeof TIPOS_RENDA_VARIAVEL,
     quantidade: "",
     preco_medio: "",
+    valor_investido: "", // Novo campo para criptomoedas
     data_compra: new Date().toISOString().split("T")[0],
     corretora: "",
     setor: "",
@@ -45,6 +47,9 @@ export function AddRendaVariavelDialog() {
     mercado: "b3" as keyof typeof MERCADOS,
     observacoes: "",
   })
+
+  const calcMode = TIPOS_RENDA_VARIAVEL[formData.tipo].calcMode || "shares"
+  const isCrypto = formData.tipo === "cripto"
 
   const handleSearch = useCallback(async () => {
     if (searchQuery.length < 2) {
@@ -54,13 +59,13 @@ export function AddRendaVariavelDialog() {
     setIsSearching(true)
     setApiError(null)
     try {
-      const results = await searchAtivos(searchQuery)
+      const results = isCrypto ? await searchCryptos(searchQuery) : await searchAtivos(searchQuery)
       setSearchResults(results)
     } catch {
       setApiError("Erro ao buscar ativos. Tente digitar o ticker manualmente.")
     }
     setIsSearching(false)
-  }, [searchQuery])
+  }, [searchQuery, isCrypto])
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -83,26 +88,68 @@ export function AddRendaVariavelDialog() {
     setIsLoadingCotacao(true)
     setApiError(null)
     try {
-      const cotacao = await getCotacao(ticker.toUpperCase())
-      if (cotacao) {
-        setCotacaoAtual(cotacao.regularMarketPrice)
-        setVariacao(cotacao.regularMarketChangePercent)
-        setFormData((prev) => ({
-          ...prev,
-          preco_medio: cotacao.regularMarketPrice.toFixed(2),
-        }))
+      if (isCrypto) {
+        const cotacao = await getCryptoCotacao(ticker.toUpperCase(), formData.moeda === "BRL" ? "BRL" : "USD")
+        if (cotacao) {
+          setCotacaoAtual(cotacao.regularMarketPrice)
+          setVariacao(cotacao.regularMarketChangePercent)
+          setFormData((prev) => ({
+            ...prev,
+            preco_medio: cotacao.regularMarketPrice.toFixed(8), // Mais decimais para crypto
+          }))
+        } else {
+          setCotacaoAtual(null)
+          setVariacao(null)
+          setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
+        }
       } else {
-        setCotacaoAtual(null)
-        setVariacao(null)
-        setApiError("Nao foi possivel obter cotacao. Digite o preco manualmente.")
+        const cotacao = await getCotacao(ticker.toUpperCase())
+        if (cotacao) {
+          setCotacaoAtual(cotacao.regularMarketPrice)
+          setVariacao(cotacao.regularMarketChangePercent)
+          setFormData((prev) => ({
+            ...prev,
+            preco_medio: cotacao.regularMarketPrice.toFixed(2),
+          }))
+        } else {
+          setCotacaoAtual(null)
+          setVariacao(null)
+          setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
+        }
       }
     } catch {
       setCotacaoAtual(null)
       setVariacao(null)
-      setApiError("Erro na API. Digite o preco manualmente.")
+      setApiError("Erro na API. Digite o preço manualmente.")
     }
     setIsLoadingCotacao(false)
   }
+
+  useEffect(() => {
+    if (calcMode === "value" && formData.valor_investido && formData.preco_medio) {
+      const valorInvestido = Number.parseFloat(formData.valor_investido)
+      const precoMedio = Number.parseFloat(formData.preco_medio)
+      if (valorInvestido > 0 && precoMedio > 0) {
+        const quantidade = valorInvestido / precoMedio
+        setFormData((prev) => ({ ...prev, quantidade: quantidade.toFixed(8) }))
+      }
+    }
+  }, [formData.valor_investido, formData.preco_medio, calcMode])
+
+  useEffect(() => {
+    if (formData.tipo === "cripto") {
+      setFormData((prev) => ({ ...prev, mercado: "crypto", setor: "" }))
+    } else if (
+      formData.tipo === "acao" ||
+      formData.tipo === "fii" ||
+      formData.tipo === "etf" ||
+      formData.tipo === "bdr"
+    ) {
+      setFormData((prev) => ({ ...prev, mercado: "b3" }))
+    } else if (formData.tipo === "stock" || formData.tipo === "reit") {
+      setFormData((prev) => ({ ...prev, mercado: "nyse", moeda: "USD" }))
+    }
+  }, [formData.tipo])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -114,12 +161,15 @@ export function AddRendaVariavelDialog() {
 
     if (!user) return
 
+    const quantidade = Number.parseFloat(formData.quantidade)
+    const precoMedio = Number.parseFloat(formData.preco_medio)
+
     await supabase.from("renda_variavel").insert({
       user_id: user.id,
       ticker: formData.ticker.toUpperCase(),
       tipo: formData.tipo,
-      quantidade: Number.parseFloat(formData.quantidade),
-      preco_medio: Number.parseFloat(formData.preco_medio),
+      quantidade,
+      preco_medio: precoMedio,
       data_compra: formData.data_compra,
       corretora: formData.corretora || null,
       setor: formData.setor || null,
@@ -134,6 +184,7 @@ export function AddRendaVariavelDialog() {
       tipo: "acao",
       quantidade: "",
       preco_medio: "",
+      valor_investido: "",
       data_compra: new Date().toISOString().split("T")[0],
       corretora: "",
       setor: "",
@@ -158,17 +209,51 @@ export function AddRendaVariavelDialog() {
           Adicionar Ativo
         </Button>
       </DialogTrigger>
-      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-2xl max-h-[95vh]">
-        <DialogHeader>
-          <DialogTitle className="text-primary">Adicionar Ativo de Renda Variavel</DialogTitle>
-          <DialogDescription>Preencha os dados do ativo para adicionar a sua carteira</DialogDescription>
+      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-2xl max-h-[95vh] flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle className="text-primary">Adicionar Ativo de Renda Variável</DialogTitle>
+          <DialogDescription>
+            {calcMode === "value"
+              ? "Informe o valor investido e a cotação atual. A quantidade será calculada automaticamente."
+              : "Preencha os dados do ativo para adicionar à sua carteira"}
+          </DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 max-h-[calc(95vh-120px)]">
+
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
+        >
           {apiError && (
             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-sm">
               {apiError}
             </div>
           )}
+
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor={`${formId}-tipo`}>Tipo de Ativo *</Label>
+              <Select
+                value={formData.tipo}
+                onValueChange={(v) =>
+                  setFormData((prev) => ({ ...prev, tipo: v as keyof typeof TIPOS_RENDA_VARIAVEL }))
+                }
+              >
+                <SelectTrigger id={`${formId}-tipo`} name="tipo" className="border-primary/20 bg-background">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="border-primary/20">
+                  {Object.entries(TIPOS_RENDA_VARIAVEL).map(([key, { label, color }]) => (
+                    <SelectItem key={key} value={key}>
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: color }} />
+                        {label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
 
           <div className="space-y-2">
             <Label htmlFor={`${formId}-search`}>Buscar Ativo</Label>
@@ -176,7 +261,11 @@ export function AddRendaVariavelDialog() {
               <Input
                 id={`${formId}-search`}
                 name="search"
-                placeholder="Digite o ticker ou nome (ex: PETR4, Petrobras)..."
+                placeholder={
+                  isCrypto
+                    ? "Digite a criptomoeda (ex: BTC, ETH)..."
+                    : "Digite o ticker ou nome (ex: PETR4, Petrobras)..."
+                }
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="border-primary/20 bg-background pr-10"
@@ -209,12 +298,12 @@ export function AddRendaVariavelDialog() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor={`${formId}-ticker`}>Ticker *</Label>
+              <Label htmlFor={`${formId}-ticker`}>{isCrypto ? "Criptomoeda" : "Ticker"} *</Label>
               <div className="flex gap-2">
                 <Input
                   id={`${formId}-ticker`}
                   name="ticker"
-                  placeholder="Ex: PETR4"
+                  placeholder={isCrypto ? "Ex: BTC" : "Ex: PETR4"}
                   value={formData.ticker}
                   onChange={(e) => {
                     setFormData((prev) => ({ ...prev, ticker: e.target.value.toUpperCase() }))
@@ -232,7 +321,7 @@ export function AddRendaVariavelDialog() {
                   onClick={() => fetchCotacao(formData.ticker)}
                   disabled={!formData.ticker || isLoadingCotacao}
                   className="shrink-0"
-                  aria-label="Buscar cotacao"
+                  aria-label="Buscar cotação"
                 >
                   {isLoadingCotacao ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 </Button>
@@ -240,7 +329,7 @@ export function AddRendaVariavelDialog() {
               {cotacaoAtual !== null && (
                 <div className="flex items-center justify-between p-2 rounded-lg bg-muted border border-primary/20 text-sm">
                   <div>
-                    <p className="text-xs text-muted-foreground">Cotacao</p>
+                    <p className="text-xs text-muted-foreground">Cotação Atual</p>
                     <p className="font-bold text-primary">{formatCurrency(cotacaoAtual)}</p>
                   </div>
                   {variacao !== null && (
@@ -251,27 +340,6 @@ export function AddRendaVariavelDialog() {
                   )}
                 </div>
               )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor={`${formId}-tipo`}>Tipo de Ativo *</Label>
-              <Select
-                value={formData.tipo}
-                onValueChange={(v) =>
-                  setFormData((prev) => ({ ...prev, tipo: v as keyof typeof TIPOS_RENDA_VARIAVEL }))
-                }
-              >
-                <SelectTrigger id={`${formId}-tipo`} name="tipo" className="border-primary/20 bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-primary/20">
-                  {Object.entries(TIPOS_RENDA_VARIAVEL).map(([key, { label }]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
             </div>
 
             <div className="space-y-2">
@@ -293,54 +361,92 @@ export function AddRendaVariavelDialog() {
               </Select>
             </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={`${formId}-mercado`}>Mercado *</Label>
-              <Select
-                value={formData.mercado}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, mercado: v as keyof typeof MERCADOS }))}
-              >
-                <SelectTrigger id={`${formId}-mercado`} name="mercado" className="border-primary/20 bg-background">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="border-primary/20">
-                  {Object.entries(MERCADOS).map(([key, { label }]) => (
-                    <SelectItem key={key} value={key}>
-                      {label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
+            {calcMode === "value" ? (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-valor_investido`} className="flex items-center gap-2">
+                    <DollarSign className="h-4 w-4" />
+                    Valor Investido *
+                  </Label>
+                  <Input
+                    id={`${formId}-valor_investido`}
+                    name="valor_investido"
+                    type="number"
+                    step="0.01"
+                    placeholder="Digite o valor investido"
+                    value={formData.valor_investido}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, valor_investido: e.target.value }))}
+                    className="border-primary/20 bg-background"
+                    required
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={`${formId}-quantidade`}>Quantidade *</Label>
-              <Input
-                id={`${formId}-quantidade`}
-                name="quantidade"
-                type="number"
-                step="0.0001"
-                placeholder="0"
-                value={formData.quantidade}
-                onChange={(e) => setFormData((prev) => ({ ...prev, quantidade: e.target.value }))}
-                className="border-primary/20 bg-background"
-                required
-              />
-            </div>
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-preco_medio`}>Preço na Compra *</Label>
+                  <Input
+                    id={`${formId}-preco_medio`}
+                    name="preco_medio"
+                    type="number"
+                    step="0.00000001"
+                    placeholder="Digite ou busque cotação"
+                    value={formData.preco_medio}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, preco_medio: e.target.value }))}
+                    className="border-primary/20 bg-background"
+                    required
+                  />
+                </div>
 
-            <div className="space-y-2">
-              <Label htmlFor={`${formId}-preco_medio`}>Preco Medio *</Label>
-              <Input
-                id={`${formId}-preco_medio`}
-                name="preco_medio"
-                type="number"
-                step="0.01"
-                placeholder="Digite ou busque cotacao"
-                value={formData.preco_medio}
-                onChange={(e) => setFormData((prev) => ({ ...prev, preco_medio: e.target.value }))}
-                className="border-primary/20 bg-background"
-                required
-              />
-            </div>
+                <div className="space-y-2 sm:col-span-2">
+                  <Label htmlFor={`${formId}-quantidade`} className="flex items-center gap-2">
+                    <Calculator className="h-4 w-4 text-emerald-500" />
+                    Quantidade (Calculada Automaticamente)
+                  </Label>
+                  <Input
+                    id={`${formId}-quantidade`}
+                    name="quantidade"
+                    type="number"
+                    step="0.00000001"
+                    value={formData.quantidade}
+                    className="border-primary/20 bg-emerald-500/10 font-mono"
+                    readOnly
+                    disabled
+                  />
+                  <p className="text-xs text-muted-foreground">Quantidade = Valor Investido ÷ Preço na Compra</p>
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-quantidade`}>Quantidade *</Label>
+                  <Input
+                    id={`${formId}-quantidade`}
+                    name="quantidade"
+                    type="number"
+                    step="0.0001"
+                    placeholder="0"
+                    value={formData.quantidade}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, quantidade: e.target.value }))}
+                    className="border-primary/20 bg-background"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor={`${formId}-preco_medio`}>Preço Médio *</Label>
+                  <Input
+                    id={`${formId}-preco_medio`}
+                    name="preco_medio"
+                    type="number"
+                    step="0.01"
+                    placeholder="Digite ou busque cotação"
+                    value={formData.preco_medio}
+                    onChange={(e) => setFormData((prev) => ({ ...prev, preco_medio: e.target.value }))}
+                    className="border-primary/20 bg-background"
+                    required
+                  />
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor={`${formId}-data_compra`}>Data da Compra *</Label>
@@ -360,27 +466,41 @@ export function AddRendaVariavelDialog() {
               <Input
                 id={`${formId}-corretora`}
                 name="corretora"
-                placeholder="Ex: XP, Clear, Rico..."
+                placeholder={isCrypto ? "Ex: Binance, Coinbase..." : "Ex: XP, Clear, Rico..."}
                 value={formData.corretora}
                 onChange={(e) => setFormData((prev) => ({ ...prev, corretora: e.target.value }))}
                 className="border-primary/20 bg-background"
               />
             </div>
 
+            {!isCrypto && (
+              <div className="space-y-2 sm:col-span-2">
+                <Label htmlFor={`${formId}-setor`}>Setor</Label>
+                <Select value={formData.setor} onValueChange={(v) => setFormData((prev) => ({ ...prev, setor: v }))}>
+                  <SelectTrigger id={`${formId}-setor`} name="setor" className="border-primary/20 bg-background">
+                    <SelectValue placeholder="Selecione o setor" />
+                  </SelectTrigger>
+                  <SelectContent className="border-primary/20">
+                    {SETORES.map((setor) => (
+                      <SelectItem key={setor} value={setor}>
+                        {setor}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
+
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor={`${formId}-setor`}>Setor</Label>
-              <Select value={formData.setor} onValueChange={(v) => setFormData((prev) => ({ ...prev, setor: v }))}>
-                <SelectTrigger id={`${formId}-setor`} name="setor" className="border-primary/20 bg-background">
-                  <SelectValue placeholder="Selecione o setor" />
-                </SelectTrigger>
-                <SelectContent className="border-primary/20">
-                  {SETORES.map((setor) => (
-                    <SelectItem key={setor} value={setor}>
-                      {setor}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <Label htmlFor={`${formId}-observacoes`}>Observações</Label>
+              <Input
+                id={`${formId}-observacoes`}
+                name="observacoes"
+                placeholder="Notas adicionais..."
+                value={formData.observacoes}
+                onChange={(e) => setFormData((prev) => ({ ...prev, observacoes: e.target.value }))}
+                className="border-primary/20 bg-background"
+              />
             </div>
           </div>
 
