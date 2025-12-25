@@ -42,68 +42,119 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
   const [transferring, setTransferring] = useState(false)
   const [valor, setValor] = useState("")
   const [isLoading, setIsLoading] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const handleDelete = async () => {
-    const supabase = createClient()
-    await supabase.from("caixinhas").delete().eq("id", caixinha.id)
-    setDeleting(false)
-    router.refresh()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      const { error: deleteError } = await supabase.from("caixinhas").delete().eq("id", caixinha.id)
+
+      if (deleteError) throw deleteError
+
+      setDeleting(false)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao excluir caixinha")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleAddMoney = async () => {
-    setIsLoading(true)
-    const supabase = createClient()
     const valorNum = Number.parseFloat(valor)
-    const novoSaldo = caixinha.saldo + valorNum
-
-    // Update caixinha
-    await supabase.from("caixinhas").update({ saldo: novoSaldo }).eq("id", caixinha.id)
-
-    // If linked to objetivo, update objetivo valor_atual
-    if (caixinha.objetivo_id) {
-      const objetivo = objetivos.find((o) => o.id === caixinha.objetivo_id)
-      if (objetivo) {
-        await supabase
-          .from("objetivos")
-          .update({ valor_atual: objetivo.valor_atual + valorNum })
-          .eq("id", caixinha.objetivo_id)
-      }
+    if (isNaN(valorNum) || valorNum <= 0) {
+      setError("Valor deve ser maior que zero")
+      return
     }
 
-    setIsLoading(false)
-    setValor("")
-    setAddingMoney(false)
-    router.refresh()
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      const novoSaldo = caixinha.saldo + valorNum
+
+      const { error: updateError } = await supabase.from("caixinhas").update({ saldo: novoSaldo }).eq("id", caixinha.id)
+
+      if (updateError) throw updateError
+
+      if (caixinha.objetivo_id) {
+        const objetivo = objetivos.find((o) => o.id === caixinha.objetivo_id)
+        if (objetivo) {
+          const { error: objetivoError } = await supabase
+            .from("objetivos")
+            .update({ valor_atual: objetivo.valor_atual + valorNum })
+            .eq("id", caixinha.objetivo_id)
+
+          if (objetivoError) {
+            await supabase.from("caixinhas").update({ saldo: caixinha.saldo }).eq("id", caixinha.id)
+            throw objetivoError
+          }
+        }
+      }
+
+      setValor("")
+      setAddingMoney(false)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao depositar")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   const handleRemoveMoney = async () => {
-    setIsLoading(true)
-    const supabase = createClient()
     const valorNum = Number.parseFloat(valor)
-    const novoSaldo = Math.max(0, caixinha.saldo - valorNum)
-    const diferencaReal = caixinha.saldo - novoSaldo
-
-    // Update caixinha
-    await supabase.from("caixinhas").update({ saldo: novoSaldo }).eq("id", caixinha.id)
-
-    // If linked to objetivo, update objetivo valor_atual
-    if (caixinha.objetivo_id) {
-      const objetivo = objetivos.find((o) => o.id === caixinha.objetivo_id)
-      if (objetivo) {
-        await supabase
-          .from("objetivos")
-          .update({ valor_atual: Math.max(0, objetivo.valor_atual - diferencaReal) })
-          .eq("id", caixinha.objetivo_id)
-      }
+    if (isNaN(valorNum) || valorNum <= 0) {
+      setError("Valor deve ser maior que zero")
+      return
     }
 
-    setIsLoading(false)
-    setValor("")
-    setRemovingMoney(false)
-    router.refresh()
+    if (valorNum > caixinha.saldo) {
+      setError("Valor maior que o saldo disponivel")
+      return
+    }
+
+    setIsLoading(true)
+    setError(null)
+
+    try {
+      const supabase = createClient()
+      const novoSaldo = caixinha.saldo - valorNum
+      const diferencaReal = caixinha.saldo - novoSaldo
+
+      const { error: updateError } = await supabase.from("caixinhas").update({ saldo: novoSaldo }).eq("id", caixinha.id)
+
+      if (updateError) throw updateError
+
+      if (caixinha.objetivo_id) {
+        const objetivo = objetivos.find((o) => o.id === caixinha.objetivo_id)
+        if (objetivo) {
+          const { error: objetivoError } = await supabase
+            .from("objetivos")
+            .update({ valor_atual: Math.max(0, objetivo.valor_atual - diferencaReal) })
+            .eq("id", caixinha.objetivo_id)
+
+          if (objetivoError) {
+            await supabase.from("caixinhas").update({ saldo: caixinha.saldo }).eq("id", caixinha.id)
+            throw objetivoError
+          }
+        }
+      }
+
+      setValor("")
+      setRemovingMoney(false)
+      router.refresh()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao retirar")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
-  // Calculate progress if linked to objetivo
   const objetivoVinculado = caixinha.objetivo_id ? objetivos.find((o) => o.id === caixinha.objetivo_id) : null
   const progressoObjetivo = objetivoVinculado
     ? Math.min((caixinha.saldo / objetivoVinculado.valor_total) * 100, 100)
@@ -183,7 +234,6 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
         </CardContent>
       </Card>
 
-      {/* Dialogs remain the same */}
       <Dialog open={editing} onOpenChange={setEditing}>
         <DialogContent className="glass-card border-primary/20">
           <DialogHeader>
@@ -198,7 +248,16 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
         </DialogContent>
       </Dialog>
 
-      <Dialog open={addingMoney} onOpenChange={setAddingMoney}>
+      <Dialog
+        open={addingMoney}
+        onOpenChange={(open) => {
+          setAddingMoney(open)
+          if (!open) {
+            setError(null)
+            setValor("")
+          }
+        }}
+      >
         <DialogContent className="glass-card border-primary/20">
           <DialogHeader>
             <DialogTitle>Depositar na Caixinha</DialogTitle>
@@ -217,13 +276,14 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
                 id="valor"
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
                 placeholder="0,00"
                 value={valor}
                 onChange={(e) => setValor(e.target.value)}
                 className="border-primary/20 bg-background/50"
               />
             </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button onClick={handleAddMoney} className="w-full neon-glow" disabled={isLoading || !valor}>
               {isLoading ? "Depositando..." : "Depositar"}
             </Button>
@@ -231,7 +291,16 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
         </DialogContent>
       </Dialog>
 
-      <Dialog open={removingMoney} onOpenChange={setRemovingMoney}>
+      <Dialog
+        open={removingMoney}
+        onOpenChange={(open) => {
+          setRemovingMoney(open)
+          if (!open) {
+            setError(null)
+            setValor("")
+          }
+        }}
+      >
         <DialogContent className="glass-card border-primary/20">
           <DialogHeader>
             <DialogTitle>Retirar da Caixinha</DialogTitle>
@@ -252,7 +321,7 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
                 id="valor"
                 type="number"
                 step="0.01"
-                min="0"
+                min="0.01"
                 max={caixinha.saldo}
                 placeholder="0,00"
                 value={valor}
@@ -260,6 +329,7 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
                 className="border-primary/20 bg-background/50"
               />
             </div>
+            {error && <p className="text-sm text-destructive">{error}</p>}
             <Button onClick={handleRemoveMoney} className="w-full" variant="destructive" disabled={isLoading || !valor}>
               {isLoading ? "Retirando..." : "Retirar"}
             </Button>
@@ -275,16 +345,27 @@ export function SavingsBoxItem({ caixinha, caixinhas, objetivos, userId }: Savin
         userId={userId}
       />
 
-      <AlertDialog open={deleting} onOpenChange={setDeleting}>
+      <AlertDialog
+        open={deleting}
+        onOpenChange={(open) => {
+          setDeleting(open)
+          if (!open) setError(null)
+        }}
+      >
         <AlertDialogContent className="glass-card border-primary/20">
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir caixinha?</AlertDialogTitle>
             <AlertDialogDescription>Esta acao nao pode ser desfeita.</AlertDialogDescription>
           </AlertDialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Excluir
+            <AlertDialogCancel disabled={isLoading}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground"
+              disabled={isLoading}
+            >
+              {isLoading ? "Excluindo..." : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

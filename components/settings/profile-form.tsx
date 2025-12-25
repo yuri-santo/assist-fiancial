@@ -19,6 +19,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
   const router = useRouter()
   const [isLoading, setIsLoading] = useState(false)
   const [success, setSuccess] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   const [nome, setNome] = useState(profile?.nome || "")
   const [tipoUsuario, setTipoUsuario] = useState(profile?.tipo_usuario || "PF")
@@ -27,22 +28,42 @@ export function ProfileForm({ profile }: ProfileFormProps) {
     e.preventDefault()
     setIsLoading(true)
     setSuccess(false)
+    setError(null)
 
-    const supabase = createClient()
+    if (!nome.trim()) {
+      setError("Nome e obrigatorio")
+      setIsLoading(false)
+      return
+    }
 
-    await supabase
-      .from("profiles")
-      .update({
-        nome,
-        tipo_usuario: tipoUsuario,
-      })
-      .eq("id", profile?.id)
+    if (!profile?.id) {
+      setError("Perfil nao encontrado")
+      setIsLoading(false)
+      return
+    }
 
-    setIsLoading(false)
-    setSuccess(true)
-    router.refresh()
+    try {
+      const supabase = createClient()
 
-    setTimeout(() => setSuccess(false), 3000)
+      const { error: updateError } = await supabase
+        .from("profiles")
+        .update({
+          nome: nome.trim(),
+          tipo_usuario: tipoUsuario,
+        })
+        .eq("id", profile.id)
+
+      if (updateError) throw updateError
+
+      setSuccess(true)
+      router.refresh()
+
+      setTimeout(() => setSuccess(false), 3000)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erro ao atualizar perfil")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -70,6 +91,7 @@ export function ProfileForm({ profile }: ProfileFormProps) {
         </Select>
       </div>
 
+      {error && <p className="text-sm text-destructive">{error}</p>}
       {success && <p className="text-sm text-emerald-600">Perfil atualizado com sucesso!</p>}
 
       <Button type="submit" disabled={isLoading}>

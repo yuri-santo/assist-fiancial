@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { Bell, Check, AlertTriangle, Lightbulb, Trophy, Clock, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -42,9 +42,11 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
   const [isLoading, setIsLoading] = useState(true)
   const [tableExists, setTableExists] = useState(true)
   const router = useRouter()
-  const supabase = createClient()
+  const isMounted = useRef(true)
 
   const fetchNotificacoes = useCallback(async () => {
+    const supabase = createClient()
+
     try {
       const { data, error } = await supabase
         .from("notificacoes")
@@ -53,8 +55,9 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
         .order("created_at", { ascending: false })
         .limit(20)
 
+      if (!isMounted.current) return
+
       if (error) {
-        // Se a tabela nao existe, nao mostrar erro
         if (error.code === "42P01" || error.message.includes("does not exist")) {
           setTableExists(false)
           setNotificacoes([])
@@ -67,19 +70,26 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
         setTableExists(true)
       }
     } catch {
-      setTableExists(false)
+      if (isMounted.current) {
+        setTableExists(false)
+      }
     } finally {
-      setIsLoading(false)
+      if (isMounted.current) {
+        setIsLoading(false)
+      }
     }
-  }, [userId, supabase])
+  }, [userId])
 
   useEffect(() => {
+    isMounted.current = true
     fetchNotificacoes()
 
-    // Realtime subscription apenas se a tabela existir
+    let channel: ReturnType<ReturnType<typeof createClient>["channel"]> | null = null
+
     if (tableExists) {
-      const channel = supabase
-        .channel("notificacoes")
+      const supabase = createClient()
+      channel = supabase
+        .channel(`notificacoes-${userId}`)
         .on(
           "postgres_changes",
           { event: "*", schema: "public", table: "notificacoes", filter: `user_id=eq.${userId}` },
@@ -88,29 +98,36 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
           },
         )
         .subscribe()
+    }
 
-      return () => {
+    return () => {
+      isMounted.current = false
+      if (channel) {
+        const supabase = createClient()
         supabase.removeChannel(channel)
       }
     }
-  }, [userId, supabase, tableExists, fetchNotificacoes])
+  }, [userId, tableExists, fetchNotificacoes])
 
   const naoLidas = notificacoes.filter((n) => !n.lida).length
 
   const marcarComoLida = async (id: string) => {
     if (!tableExists) return
+    const supabase = createClient()
     await supabase.from("notificacoes").update({ lida: true }).eq("id", id)
     setNotificacoes((prev) => prev.map((n) => (n.id === id ? { ...n, lida: true } : n)))
   }
 
   const marcarTodasComoLidas = async () => {
     if (!tableExists) return
+    const supabase = createClient()
     await supabase.from("notificacoes").update({ lida: true }).eq("user_id", userId)
     setNotificacoes((prev) => prev.map((n) => ({ ...n, lida: true })))
   }
 
   const excluirNotificacao = async (id: string) => {
     if (!tableExists) return
+    const supabase = createClient()
     await supabase.from("notificacoes").delete().eq("id", id)
     setNotificacoes((prev) => prev.filter((n) => n.id !== id))
   }

@@ -36,14 +36,28 @@ export function ExpensesList({ despesas, categorias, cartoes, userId }: Expenses
   const router = useRouter()
   const [editingDespesa, setEditingDespesa] = useState<Despesa | null>(null)
   const [deletingDespesa, setDeletingDespesa] = useState<Despesa | null>(null)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [deleteError, setDeleteError] = useState<string | null>(null)
 
   const handleDelete = async () => {
     if (!deletingDespesa) return
 
-    const supabase = createClient()
-    await supabase.from("despesas").delete().eq("id", deletingDespesa.id)
-    setDeletingDespesa(null)
-    router.refresh()
+    setIsDeleting(true)
+    setDeleteError(null)
+
+    try {
+      const supabase = createClient()
+      const { error } = await supabase.from("despesas").delete().eq("id", deletingDespesa.id)
+
+      if (error) throw error
+
+      setDeletingDespesa(null)
+      router.refresh()
+    } catch (err) {
+      setDeleteError(err instanceof Error ? err.message : "Erro ao excluir despesa")
+    } finally {
+      setIsDeleting(false)
+    }
   }
 
   const columns: ColumnDef<Despesa>[] = [
@@ -135,7 +149,13 @@ export function ExpensesList({ despesas, categorias, cartoes, userId }: Expenses
         </DialogContent>
       </Dialog>
 
-      <AlertDialog open={!!deletingDespesa} onOpenChange={() => setDeletingDespesa(null)}>
+      <AlertDialog
+        open={!!deletingDespesa}
+        onOpenChange={() => {
+          setDeletingDespesa(null)
+          setDeleteError(null)
+        }}
+      >
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Excluir despesa?</AlertDialogTitle>
@@ -143,10 +163,15 @@ export function ExpensesList({ despesas, categorias, cartoes, userId }: Expenses
               Esta acao nao pode ser desfeita. A despesa sera permanentemente removida.
             </AlertDialogDescription>
           </AlertDialogHeader>
+          {deleteError && <p className="text-sm text-destructive">{deleteError}</p>}
           <AlertDialogFooter>
-            <AlertDialogCancel>Cancelar</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive text-destructive-foreground">
-              Excluir
+            <AlertDialogCancel disabled={isDeleting}>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={handleDelete}
+              className="bg-destructive text-destructive-foreground"
+              disabled={isDeleting}
+            >
+              {isDeleting ? "Excluindo..." : "Excluir"}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

@@ -15,13 +15,14 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Trash2, TrendingUp, TrendingDown, Loader2 } from "lucide-react"
+import { Trash2, TrendingUp, TrendingDown, Loader2, Eye } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
 import { TIPOS_RENDA_VARIAVEL } from "@/lib/api/brapi"
 import type { RendaVariavel } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
+import { AssetDetailDialog } from "./asset-detail-dialog"
 
 interface RendaVariavelListProps {
   ativos: RendaVariavel[]
@@ -31,6 +32,8 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
+  const [selectedAtivo, setSelectedAtivo] = useState<RendaVariavel | null>(null)
+  const [isDetailOpen, setIsDetailOpen] = useState(false)
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -41,6 +44,11 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
     startTransition(() => {
       router.refresh()
     })
+  }
+
+  const handleViewAsset = (ativo: RendaVariavel) => {
+    setSelectedAtivo(ativo)
+    setIsDetailOpen(true)
   }
 
   if (ativos.length === 0) {
@@ -77,7 +85,7 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
                   <TableHead className="text-right text-muted-foreground">Var. Dia</TableHead>
                   <TableHead className="text-right text-muted-foreground">Valor Atual</TableHead>
                   <TableHead className="text-right text-muted-foreground">Lucro/Prej</TableHead>
-                  <TableHead className="w-10"></TableHead>
+                  <TableHead className="w-20"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -94,7 +102,8 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
                         transition={{ duration: 0.3, delay: index * 0.05 }}
-                        className="border-primary/10 hover:bg-primary/5 transition-colors"
+                        className="border-primary/10 hover:bg-primary/5 transition-colors cursor-pointer"
+                        onClick={() => handleViewAsset(ativo)}
                       >
                         <TableCell className="font-bold">{ativo.ticker}</TableCell>
                         <TableCell>
@@ -144,14 +153,30 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
                           </div>
                         </TableCell>
                         <TableCell>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            onClick={() => setDeleteId(ativo.id)}
-                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div className="flex items-center gap-1">
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleViewAsset(ativo)
+                              }}
+                              className="text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                setDeleteId(ativo.id)
+                              }}
+                              className="text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </TableCell>
                       </motion.tr>
                     )
@@ -162,6 +187,8 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
           </CardContent>
         </Card>
       </motion.div>
+
+      {selectedAtivo && <AssetDetailDialog ativo={selectedAtivo} open={isDetailOpen} onOpenChange={setIsDetailOpen} />}
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent className="glass-card border-primary/20">

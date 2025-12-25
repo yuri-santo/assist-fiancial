@@ -22,7 +22,7 @@ import {
   LineChart,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import type { Profile, SaudeFinanceira } from "@/lib/types"
@@ -55,21 +55,21 @@ export function Sidebar() {
     fatores: [],
   })
   const router = useRouter()
-  const supabase = createClient()
+  const isMounted = useRef(true)
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = useCallback(async () => {
+    const supabase = createClient()
+
+    try {
       const {
         data: { user },
       } = await supabase.auth.getUser()
-      if (!user) return
+      if (!user || !isMounted.current) return
 
-      // Fetch profile
       const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
-      if (profileData) setProfile(profileData)
+      if (profileData && isMounted.current) setProfile(profileData)
 
-      // Fetch financial data for health calculation
       const now = new Date()
       const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
       const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString()
@@ -97,6 +97,8 @@ export function Sidebar() {
         supabase.from("renda_variavel").select("quantidade, preco_medio").eq("user_id", user.id),
       ])
 
+      if (!isMounted.current) return
+
       const despesas = despesasRes.data?.reduce((sum, d) => sum + d.valor, 0) || 0
       const receitas = receitasRes.data?.reduce((sum, r) => sum + r.valor, 0) || 0
       const reservaAtual = reservaRes.data?.valor_atual || 0
@@ -117,13 +119,25 @@ export function Sidebar() {
         objetivosTotal: objetivos.length,
       }
 
-      setSaude(calcularSaudeFinanceira(healthData))
+      if (isMounted.current) {
+        setSaude(calcularSaudeFinanceira(healthData))
+      }
+    } catch (error) {
+      console.error("[v0] Error fetching sidebar data:", error)
     }
+  }, [])
 
+  useEffect(() => {
+    isMounted.current = true
     fetchData()
-  }, [supabase])
+
+    return () => {
+      isMounted.current = false
+    }
+  }, [fetchData])
 
   const handleLogout = async () => {
+    const supabase = createClient()
     await supabase.auth.signOut()
     router.push("/auth/login")
   }

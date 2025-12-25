@@ -36,11 +36,24 @@ export function IncomeForm({ userId, receita, onSuccess }: IncomeFormProps) {
     setIsLoading(true)
     setError(null)
 
+    const valorNum = Number.parseFloat(valor)
+    if (isNaN(valorNum) || valorNum <= 0) {
+      setError("Valor deve ser maior que zero")
+      setIsLoading(false)
+      return
+    }
+
+    if (!fonte) {
+      setError("Selecione uma fonte de receita")
+      setIsLoading(false)
+      return
+    }
+
     const supabase = createClient()
 
     const incomeData = {
       user_id: userId,
-      valor: Number.parseFloat(valor),
+      valor: valorNum,
       fonte,
       data,
       descricao: descricao || null,
@@ -59,7 +72,8 @@ export function IncomeForm({ userId, receita, onSuccess }: IncomeFormProps) {
       router.refresh()
       onSuccess?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar receita")
+      const errorMessage = err instanceof Error ? err.message : "Erro ao salvar receita"
+      setError(errorMessage.includes("violates") ? "Dados invalidos. Verifique os campos." : errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -74,7 +88,7 @@ export function IncomeForm({ userId, receita, onSuccess }: IncomeFormProps) {
             id="valor"
             type="number"
             step="0.01"
-            min="0"
+            min="0.01"
             placeholder="0,00"
             value={valor}
             onChange={(e) => setValor(e.target.value)}
@@ -89,7 +103,7 @@ export function IncomeForm({ userId, receita, onSuccess }: IncomeFormProps) {
 
       <div className="space-y-2">
         <Label htmlFor="fonte">Fonte</Label>
-        <Select value={fonte} onValueChange={setFonte} required>
+        <Select value={fonte} onValueChange={setFonte}>
           <SelectTrigger>
             <SelectValue placeholder="Selecione a fonte" />
           </SelectTrigger>

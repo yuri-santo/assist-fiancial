@@ -17,7 +17,7 @@ interface GoalFormProps {
   onSuccess?: () => void
 }
 
-const tipos = [
+const tipos: { valor: Objetivo["tipo"]; nome: string }[] = [
   { valor: "sonho", nome: "Sonho" },
   { valor: "reserva", nome: "Reserva" },
   { valor: "projeto", nome: "Projeto" },
@@ -41,7 +41,7 @@ export function GoalForm({ userId, objetivo, onSuccess }: GoalFormProps) {
   const [valorTotal, setValorTotal] = useState(objetivo?.valor_total?.toString() || "")
   const [valorAtual, setValorAtual] = useState(objetivo?.valor_atual?.toString() || "0")
   const [prazo, setPrazo] = useState(objetivo?.prazo || "")
-  const [tipo, setTipo] = useState(objetivo?.tipo || "sonho")
+  const [tipo, setTipo] = useState<Objetivo["tipo"]>(objetivo?.tipo || "sonho")
   const [cor, setCor] = useState(objetivo?.cor || "#10b981")
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -49,13 +49,34 @@ export function GoalForm({ userId, objetivo, onSuccess }: GoalFormProps) {
     setIsLoading(true)
     setError(null)
 
+    const valorTotalNum = Number.parseFloat(valorTotal)
+    const valorAtualNum = Number.parseFloat(valorAtual)
+
+    if (isNaN(valorTotalNum) || valorTotalNum <= 0) {
+      setError("Valor total deve ser maior que zero")
+      setIsLoading(false)
+      return
+    }
+
+    if (isNaN(valorAtualNum) || valorAtualNum < 0) {
+      setError("Valor atual deve ser zero ou maior")
+      setIsLoading(false)
+      return
+    }
+
+    if (valorAtualNum > valorTotalNum) {
+      setError("Valor atual nao pode ser maior que o valor total")
+      setIsLoading(false)
+      return
+    }
+
     const supabase = createClient()
 
     const goalData = {
       user_id: userId,
-      nome,
-      valor_total: Number.parseFloat(valorTotal),
-      valor_atual: Number.parseFloat(valorAtual),
+      nome: nome.trim(),
+      valor_total: valorTotalNum,
+      valor_atual: valorAtualNum,
       prazo: prazo || null,
       tipo,
       cor,
@@ -99,7 +120,7 @@ export function GoalForm({ userId, objetivo, onSuccess }: GoalFormProps) {
             id="valorTotal"
             type="number"
             step="0.01"
-            min="0"
+            min="0.01"
             placeholder="0,00"
             value={valorTotal}
             onChange={(e) => setValorTotal(e.target.value)}
@@ -123,7 +144,7 @@ export function GoalForm({ userId, objetivo, onSuccess }: GoalFormProps) {
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="tipo">Tipo</Label>
-          <Select value={tipo} onValueChange={setTipo}>
+          <Select value={tipo} onValueChange={(value) => setTipo(value as Objetivo["tipo"])}>
             <SelectTrigger>
               <SelectValue />
             </SelectTrigger>

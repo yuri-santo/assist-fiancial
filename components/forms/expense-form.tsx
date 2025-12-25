@@ -42,11 +42,18 @@ export function ExpenseForm({ userId, categorias, cartoes, despesa, onSuccess }:
     setIsLoading(true)
     setError(null)
 
+    const valorNum = Number.parseFloat(valor)
+    if (isNaN(valorNum) || valorNum <= 0) {
+      setError("Valor deve ser maior que zero")
+      setIsLoading(false)
+      return
+    }
+
     const supabase = createClient()
 
     const expenseData = {
       user_id: userId,
-      valor: Number.parseFloat(valor),
+      valor: valorNum,
       categoria_id: categoriaId || null,
       data,
       descricao: descricao || null,
@@ -64,24 +71,26 @@ export function ExpenseForm({ userId, categorias, cartoes, despesa, onSuccess }:
         const { error } = await supabase.from("despesas").update(expenseData).eq("id", despesa.id)
         if (error) throw error
       } else {
-        // If installments, create multiple entries
         if (parcelado && Number.parseInt(totalParcelas) > 1) {
           const parcelas = Number.parseInt(totalParcelas)
-          const valorParcela = Number.parseFloat(valor) / parcelas
+          const valorParcela = Math.round((valorNum / parcelas) * 100) / 100
 
+          const parcelasData = []
           for (let i = 0; i < parcelas; i++) {
-            const parcelaData = new Date(data)
-            parcelaData.setMonth(parcelaData.getMonth() + i)
+            const parcelaDataObj = new Date(data)
+            parcelaDataObj.setMonth(parcelaDataObj.getMonth() + i)
 
-            const { error } = await supabase.from("despesas").insert({
+            parcelasData.push({
               ...expenseData,
               valor: valorParcela,
-              data: parcelaData.toISOString().split("T")[0],
+              data: parcelaDataObj.toISOString().split("T")[0],
               parcela_atual: i + 1,
               descricao: `${descricao || "Parcela"} (${i + 1}/${parcelas})`,
             })
-            if (error) throw error
           }
+
+          const { error } = await supabase.from("despesas").insert(parcelasData)
+          if (error) throw error
         } else {
           const { error } = await supabase.from("despesas").insert(expenseData)
           if (error) throw error
@@ -91,7 +100,8 @@ export function ExpenseForm({ userId, categorias, cartoes, despesa, onSuccess }:
       router.refresh()
       onSuccess?.()
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erro ao salvar despesa")
+      const errorMessage = err instanceof Error ? err.message : "Erro ao salvar despesa"
+      setError(errorMessage.includes("violates") ? "Dados invalidos. Verifique os campos." : errorMessage)
     } finally {
       setIsLoading(false)
     }
@@ -108,7 +118,7 @@ export function ExpenseForm({ userId, categorias, cartoes, despesa, onSuccess }:
             id="valor"
             type="number"
             step="0.01"
-            min="0"
+            min="0.01"
             placeholder="0,00"
             value={valor}
             onChange={(e) => setValor(e.target.value)}
