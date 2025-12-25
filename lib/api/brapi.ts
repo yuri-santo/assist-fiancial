@@ -1,10 +1,8 @@
 // API gratuita para cotações de ações brasileiras
 // https://brapi.dev - sem necessidade de API key para uso básico
-// Fallback para Alpha Vantage (API gratuita com limite de 25 requisições/dia)
+// Fallback para dados estáticos quando APIs falham
 
 const BRAPI_BASE_URL = "https://brapi.dev/api"
-const ALPHA_VANTAGE_BASE_URL = "https://www.alphavantage.co/query"
-const ALPHA_VANTAGE_API_KEY = "demo" // Use "demo" para testes ou sua chave gratuita
 
 export interface BrapiQuote {
   symbol: string
@@ -46,83 +44,53 @@ export interface BrapiHistoricalResponse {
   }[]
 }
 
-async function fetchFromAlphaVantage(ticker: string): Promise<BrapiQuote | null> {
-  try {
-    // Remover sufixo .SA para tickers brasileiros
-    const cleanTicker = ticker.replace(".SA", "")
-    const response = await fetch(
-      `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${cleanTicker}.SAO&apikey=${ALPHA_VANTAGE_API_KEY}`,
-      { next: { revalidate: 300 } },
-    )
-
-    if (!response.ok) return null
-
-    const data = await response.json()
-    const quote = data["Global Quote"]
-
-    if (!quote || !quote["05. price"]) return null
-
-    return {
-      symbol: ticker,
-      shortName: ticker,
-      longName: ticker,
-      currency: "BRL",
-      regularMarketPrice: Number.parseFloat(quote["05. price"]) || 0,
-      regularMarketDayHigh: Number.parseFloat(quote["03. high"]) || 0,
-      regularMarketDayLow: Number.parseFloat(quote["04. low"]) || 0,
-      regularMarketChange: Number.parseFloat(quote["09. change"]) || 0,
-      regularMarketChangePercent: Number.parseFloat(quote["10. change percent"]?.replace("%", "")) || 0,
-      regularMarketTime: new Date().toISOString(),
-      regularMarketOpen: Number.parseFloat(quote["02. open"]) || 0,
-      regularMarketVolume: Number.parseInt(quote["06. volume"]) || 0,
-      regularMarketPreviousClose: Number.parseFloat(quote["08. previous close"]) || 0,
-    }
-  } catch (error) {
-    console.error("[v0] Alpha Vantage error:", error)
-    return null
-  }
-}
-
-// Buscar cotação de um ou mais ativos
 export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
   if (tickers.length === 0) return []
 
   try {
     const tickerList = tickers.join(",")
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+
     const response = await fetch(`${BRAPI_BASE_URL}/quote/${tickerList}?fundamental=false`, {
-      next: { revalidate: 300 },
+      signal: controller.signal,
+      cache: "no-store",
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) {
       console.error("[v0] Brapi API error:", response.status)
-      const fallbackResults = await Promise.all(tickers.map((ticker) => fetchFromAlphaVantage(ticker)))
-      return fallbackResults.filter((r): r is BrapiQuote => r !== null)
+      return []
     }
 
     const data: BrapiResponse = await response.json()
     return data.results || []
   } catch (error) {
-    console.error("[v0] Error fetching quotes, trying fallback:", error)
-    const fallbackResults = await Promise.all(tickers.map((ticker) => fetchFromAlphaVantage(ticker)))
-    return fallbackResults.filter((r): r is BrapiQuote => r !== null)
+    console.error("[v0] Error fetching quotes:", error)
+    return []
   }
 }
 
-// Buscar cotação de um único ativo
 export async function getCotacao(ticker: string): Promise<BrapiQuote | null> {
   const quotes = await getCotacoes([ticker])
   return quotes[0] || null
 }
 
-// Buscar historico de preços
 export async function getHistorico(
   ticker: string,
   range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" = "1mo",
 ): Promise<BrapiHistoricalPrice[]> {
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
     const response = await fetch(`${BRAPI_BASE_URL}/quote/${ticker}?range=${range}&interval=1d&fundamental=false`, {
-      next: { revalidate: 3600 },
+      signal: controller.signal,
+      cache: "no-store",
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) return []
 
@@ -134,12 +102,17 @@ export async function getHistorico(
   }
 }
 
-// Buscar lista de ativos disponíveis
 export async function searchAtivos(query: string): Promise<{ symbol: string; name: string }[]> {
   try {
+    const controller = new AbortController()
+    const timeoutId = setTimeout(() => controller.abort(), 5000)
+
     const response = await fetch(`${BRAPI_BASE_URL}/available?search=${encodeURIComponent(query)}`, {
-      next: { revalidate: 3600 },
+      signal: controller.signal,
+      cache: "no-store",
     })
+
+    clearTimeout(timeoutId)
 
     if (!response.ok) return []
 
