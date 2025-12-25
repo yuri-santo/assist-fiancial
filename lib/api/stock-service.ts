@@ -2,8 +2,8 @@
 // Supports: Yahoo Finance, Brapi (with token), Alpha Vantage, HG Brasil, Finnhub
 // Implements: Single Responsibility, Open/Closed, Dependency Inversion principles
 
-const BRAPI_TOKEN = process.env.BRAPI_TOKEN || "sUCSXQ4LUHgtgLpa5WmZ4H"
-const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_API_KEY || "demo"
+const BRAPI_TOKEN = process.env.BRAPI_TOKEN || ""
+const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_API_KEY || ""
 const FINNHUB_KEY = process.env.FINNHUB_API_KEY || ""
 
 export interface StockQuote {
@@ -74,7 +74,7 @@ class YahooFinanceProvider implements StockAPIProvider {
   priority = 1
 
   isAvailable(): boolean {
-    return true // Always available, no API key needed
+    return true
   }
 
   async fetchQuote(ticker: string): Promise<StockQuote | null> {
@@ -104,53 +104,41 @@ class YahooFinanceProvider implements StockAPIProvider {
         })
         if (!usResponse.ok) return null
         const usData = await usResponse.json()
-        const usResult = usData.chart?.result?.[0]
-        if (!usResult) return null
-        const meta = usResult.meta
-        return {
-          symbol: cleanTicker,
-          name: meta.shortName || meta.symbol || cleanTicker,
-          price: meta.regularMarketPrice || 0,
-          change: (meta.regularMarketPrice || 0) - (meta.previousClose || 0),
-          changePercent:
-            meta.regularMarketPrice && meta.previousClose
-              ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100
-              : 0,
-          high: meta.regularMarketDayHigh || 0,
-          low: meta.regularMarketDayLow || 0,
-          open: meta.regularMarketOpen || 0,
-          previousClose: meta.previousClose || 0,
-          volume: meta.regularMarketVolume || 0,
-          timestamp: new Date((meta.regularMarketTime || Math.floor(Date.now() / 1000)) * 1000),
-          source: this.name,
-        }
+        return this.parseYahooResponse(usData, cleanTicker)
       }
 
       const data = await response.json()
-      const result = data.chart?.result?.[0]
-      if (!result) return null
-
-      const meta = result.meta
-      return {
-        symbol: cleanTicker,
-        name: meta.shortName || meta.symbol || cleanTicker,
-        price: meta.regularMarketPrice || 0,
-        change: (meta.regularMarketPrice || 0) - (meta.previousClose || 0),
-        changePercent:
-          meta.regularMarketPrice && meta.previousClose
-            ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100
-            : 0,
-        high: meta.regularMarketDayHigh || 0,
-        low: meta.regularMarketDayLow || 0,
-        open: meta.regularMarketOpen || 0,
-        previousClose: meta.previousClose || 0,
-        volume: meta.regularMarketVolume || 0,
-        timestamp: new Date((meta.regularMarketTime || Math.floor(Date.now() / 1000)) * 1000),
-        source: this.name,
-      }
+      return this.parseYahooResponse(data, cleanTicker)
     } catch (error) {
       console.error(`[v0] ${this.name} error:`, error)
       return null
+    }
+  }
+
+  private parseYahooResponse(data: Record<string, unknown>, ticker: string): StockQuote | null {
+    const result = (data.chart as Record<string, unknown>)?.result as Array<Record<string, unknown>> | undefined
+    if (!result?.[0]) return null
+
+    const meta = result[0].meta as Record<string, unknown>
+    if (!meta) return null
+
+    return {
+      symbol: ticker,
+      name: (meta.shortName as string) || (meta.symbol as string) || ticker,
+      price: (meta.regularMarketPrice as number) || 0,
+      change: ((meta.regularMarketPrice as number) || 0) - ((meta.previousClose as number) || 0),
+      changePercent:
+        meta.regularMarketPrice && meta.previousClose
+          ? (((meta.regularMarketPrice as number) - (meta.previousClose as number)) / (meta.previousClose as number)) *
+            100
+          : 0,
+      high: (meta.regularMarketDayHigh as number) || 0,
+      low: (meta.regularMarketDayLow as number) || 0,
+      open: (meta.regularMarketOpen as number) || 0,
+      previousClose: (meta.previousClose as number) || 0,
+      volume: (meta.regularMarketVolume as number) || 0,
+      timestamp: new Date(((meta.regularMarketTime as number) || Math.floor(Date.now() / 1000)) * 1000),
+      source: this.name,
     }
   }
 
@@ -179,49 +167,37 @@ class YahooFinanceProvider implements StockAPIProvider {
         })
         if (!usResponse.ok) return []
         const usData = await usResponse.json()
-        const usResult = usData.chart?.result?.[0]
-        if (!usResult) return []
-
-        const timestamps = usResult.timestamp || []
-        const quote = usResult.indicators?.quote?.[0] || {}
-        const adjClose = usResult.indicators?.adjclose?.[0]?.adjclose || []
-
-        return timestamps
-          .map((ts: number, i: number) => ({
-            date: new Date(ts * 1000),
-            open: quote.open?.[i] || 0,
-            high: quote.high?.[i] || 0,
-            low: quote.low?.[i] || 0,
-            close: quote.close?.[i] || 0,
-            volume: quote.volume?.[i] || 0,
-            adjustedClose: adjClose[i] || quote.close?.[i] || 0,
-          }))
-          .filter((p: HistoricalPrice) => p.close > 0)
+        return this.parseHistorical(usData)
       }
 
       const data = await response.json()
-      const result = data.chart?.result?.[0]
-      if (!result) return []
-
-      const timestamps = result.timestamp || []
-      const quote = result.indicators?.quote?.[0] || {}
-      const adjClose = result.indicators?.adjclose?.[0]?.adjclose || []
-
-      return timestamps
-        .map((ts: number, i: number) => ({
-          date: new Date(ts * 1000),
-          open: quote.open?.[i] || 0,
-          high: quote.high?.[i] || 0,
-          low: quote.low?.[i] || 0,
-          close: quote.close?.[i] || 0,
-          volume: quote.volume?.[i] || 0,
-          adjustedClose: adjClose[i] || quote.close?.[i] || 0,
-        }))
-        .filter((p: HistoricalPrice) => p.close > 0)
+      return this.parseHistorical(data)
     } catch (error) {
       console.error(`[v0] ${this.name} Historical error:`, error)
       return []
     }
+  }
+
+  private parseHistorical(data: Record<string, unknown>): HistoricalPrice[] {
+    const result = (data.chart as Record<string, unknown>)?.result as Array<Record<string, unknown>> | undefined
+    if (!result?.[0]) return []
+
+    const timestamps = (result[0].timestamp as number[]) || []
+    const indicators = result[0].indicators as Record<string, unknown>
+    const quote = (indicators?.quote as Array<Record<string, number[]>>)?.[0] || {}
+    const adjClose = (indicators?.adjclose as Array<{ adjclose: number[] }>)?.[0]?.adjclose || []
+
+    return timestamps
+      .map((ts: number, i: number) => ({
+        date: new Date(ts * 1000),
+        open: quote.open?.[i] || 0,
+        high: quote.high?.[i] || 0,
+        low: quote.low?.[i] || 0,
+        close: quote.close?.[i] || 0,
+        volume: quote.volume?.[i] || 0,
+        adjustedClose: adjClose[i] || quote.close?.[i] || 0,
+      }))
+      .filter((p: HistoricalPrice) => p.close > 0)
   }
 }
 
@@ -230,33 +206,51 @@ class BrapiProvider implements StockAPIProvider {
   priority = 2
 
   isAvailable(): boolean {
-    return !!BRAPI_TOKEN
+    return !!BRAPI_TOKEN && BRAPI_TOKEN.length > 0
   }
 
   async fetchQuote(ticker: string): Promise<StockQuote | null> {
+    if (!BRAPI_TOKEN) {
+      console.log("[v0] Brapi: No token configured, skipping")
+      return null
+    }
+
     try {
       const cleanTicker = ticker.replace(".SA", "").toUpperCase()
-      const url = `https://brapi.dev/api/quote/${cleanTicker}?token=${BRAPI_TOKEN}&fundamental=true`
+      const url = `https://brapi.dev/api/quote/${cleanTicker}?fundamental=true`
+
+      console.log(`[v0] Brapi: Fetching ${cleanTicker}...`)
 
       const response = await fetch(url, {
         cache: "no-store",
         signal: AbortSignal.timeout(8000),
+        headers: {
+          Authorization: `Bearer ${BRAPI_TOKEN}`,
+          Accept: "application/json",
+        },
       })
 
       if (!response.ok) {
-        console.error(`[v0] Brapi API error: ${response.status}`)
+        console.error(`[v0] Brapi API error: ${response.status} ${response.statusText}`)
+        const errorText = await response.text()
+        console.error(`[v0] Brapi error response:`, errorText)
         return null
       }
 
       const data = await response.json()
 
       if (data.error) {
-        console.error(`[v0] Brapi API error: ${data.message || data.error}`)
+        console.error(`[v0] Brapi API error response: ${data.message || data.error}`)
         return null
       }
 
       const result = data.results?.[0]
-      if (!result) return null
+      if (!result) {
+        console.error("[v0] Brapi: No results returned")
+        return null
+      }
+
+      console.log(`[v0] Brapi: Success for ${cleanTicker} - Price: ${result.regularMarketPrice}`)
 
       return {
         symbol: result.symbol,
@@ -282,13 +276,19 @@ class BrapiProvider implements StockAPIProvider {
   }
 
   async fetchHistorical(ticker: string, range: string): Promise<HistoricalPrice[]> {
+    if (!BRAPI_TOKEN) return []
+
     try {
       const cleanTicker = ticker.replace(".SA", "").toUpperCase()
-      const url = `https://brapi.dev/api/quote/${cleanTicker}?range=${range}&interval=1d&token=${BRAPI_TOKEN}`
+      const url = `https://brapi.dev/api/quote/${cleanTicker}?range=${range}&interval=1d`
 
       const response = await fetch(url, {
         cache: "no-store",
         signal: AbortSignal.timeout(10000),
+        headers: {
+          Authorization: `Bearer ${BRAPI_TOKEN}`,
+          Accept: "application/json",
+        },
       })
 
       if (!response.ok) return []
@@ -329,7 +329,7 @@ class HGBrasilProvider implements StockAPIProvider {
   priority = 3
 
   isAvailable(): boolean {
-    return true // Has a demo key
+    return true
   }
 
   async fetchQuote(ticker: string): Promise<StockQuote | null> {
@@ -344,7 +344,7 @@ class HGBrasilProvider implements StockAPIProvider {
 
       const data = await response.json()
       const result = data.results?.[cleanTicker]
-      if (!result) return null
+      if (!result || !result.price) return null
 
       return {
         symbol: cleanTicker,
@@ -367,7 +367,6 @@ class HGBrasilProvider implements StockAPIProvider {
   }
 
   async fetchHistorical(): Promise<HistoricalPrice[]> {
-    // HG Brasil doesn't provide historical data in free tier
     return []
   }
 }
@@ -377,10 +376,12 @@ class AlphaVantageProvider implements StockAPIProvider {
   priority = 4
 
   isAvailable(): boolean {
-    return !!ALPHA_VANTAGE_KEY
+    return !!ALPHA_VANTAGE_KEY && ALPHA_VANTAGE_KEY !== "demo"
   }
 
   async fetchQuote(ticker: string): Promise<StockQuote | null> {
+    if (!ALPHA_VANTAGE_KEY) return null
+
     try {
       const cleanTicker = ticker.replace(".SA", "").toUpperCase()
       const symbolForAV = cleanTicker.match(/^\d/) ? `${cleanTicker}.SAO` : cleanTicker
@@ -423,6 +424,8 @@ class AlphaVantageProvider implements StockAPIProvider {
   }
 
   async fetchHistorical(ticker: string): Promise<HistoricalPrice[]> {
+    if (!ALPHA_VANTAGE_KEY) return []
+
     try {
       const cleanTicker = ticker.replace(".SA", "").toUpperCase()
       const symbolForAV = cleanTicker.match(/^\d/) ? `${cleanTicker}.SAO` : cleanTicker
@@ -518,15 +521,15 @@ class StockService {
   private providers: StockAPIProvider[]
 
   constructor() {
-    this.providers = [
+    const allProviders = [
       new YahooFinanceProvider(),
       new BrapiProvider(),
       new HGBrasilProvider(),
       new AlphaVantageProvider(),
       new FinnhubProvider(),
     ]
-      .filter((p) => p.isAvailable())
-      .sort((a, b) => a.priority - b.priority)
+
+    this.providers = allProviders.filter((p) => p.isAvailable()).sort((a, b) => a.priority - b.priority)
 
     console.log(
       `[v0] Stock Service initialized with ${this.providers.length} providers:`,
@@ -543,6 +546,7 @@ class StockService {
           console.log(`[v0] Success: Got quote from ${provider.name} for ${ticker} - Price: ${quote.price}`)
           return quote
         }
+        console.log(`[v0] ${provider.name} returned no valid data for ${ticker}, trying next...`)
       } catch (error) {
         console.error(`[v0] ${provider.name} failed for ${ticker}:`, error)
       }
@@ -647,39 +651,18 @@ export function calculateIndicators(prices: HistoricalPrice[]): StockIndicators 
   // Average Volume
   const avgVolume = prices.reduce((sum, p) => sum + p.volume, 0) / prices.length
 
-  // Closes array for moving averages
-  const closes = prices.map((p) => p.close)
-
-  // Simple Moving Averages
-  const sma20 = closes.length >= 20 ? closes.slice(-20).reduce((a, b) => a + b, 0) / 20 : undefined
-  const sma50 = closes.length >= 50 ? closes.slice(-50).reduce((a, b) => a + b, 0) / 50 : undefined
-  const sma200 = closes.length >= 200 ? closes.slice(-200).reduce((a, b) => a + b, 0) / 200 : undefined
-
-  // Exponential Moving Averages (for MACD)
-  const calculateEMA = (data: number[], period: number): number | undefined => {
-    if (data.length < period) return undefined
-    const k = 2 / (period + 1)
-    let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period
-    for (let i = period; i < data.length; i++) {
-      ema = data[i] * k + ema * (1 - k)
-    }
-    return ema
-  }
-
-  const ema12 = calculateEMA(closes, 12)
-  const ema26 = calculateEMA(closes, 26)
-  const macd = ema12 && ema26 ? ema12 - ema26 : undefined
-
-  // RSI (14 days)
+  // RSI (14 periods)
   let rsi: number | undefined
-  if (returns.length >= 14) {
-    const gains = returns.slice(-14).filter((r) => r > 0)
-    const losses = returns
-      .slice(-14)
-      .filter((r) => r < 0)
-      .map((r) => Math.abs(r))
-    const avgGain = gains.length > 0 ? gains.reduce((a, b) => a + b, 0) / 14 : 0
-    const avgLoss = losses.length > 0 ? losses.reduce((a, b) => a + b, 0) / 14 : 0
+  if (prices.length >= 14) {
+    let gains = 0
+    let losses = 0
+    for (let i = prices.length - 14; i < prices.length; i++) {
+      const change = prices[i].close - prices[i - 1].close
+      if (change > 0) gains += change
+      else losses -= change
+    }
+    const avgGain = gains / 14
+    const avgLoss = losses / 14
     if (avgLoss > 0) {
       const rs = avgGain / avgLoss
       rsi = 100 - 100 / (1 + rs)
@@ -688,31 +671,51 @@ export function calculateIndicators(prices: HistoricalPrice[]): StockIndicators 
     }
   }
 
-  // Bollinger Bands (20-day SMA ± 2σ)
+  // Simple Moving Averages
+  const closePrices = prices.map((p) => p.close)
+  const sma20 = closePrices.length >= 20 ? closePrices.slice(-20).reduce((a, b) => a + b, 0) / 20 : undefined
+  const sma50 = closePrices.length >= 50 ? closePrices.slice(-50).reduce((a, b) => a + b, 0) / 50 : undefined
+  const sma200 = closePrices.length >= 200 ? closePrices.slice(-200).reduce((a, b) => a + b, 0) / 200 : undefined
+
+  // EMA calculation helper
+  const calculateEMA = (data: number[], period: number): number | undefined => {
+    if (data.length < period) return undefined
+    const multiplier = 2 / (period + 1)
+    let ema = data.slice(0, period).reduce((a, b) => a + b, 0) / period
+    for (let i = period; i < data.length; i++) {
+      ema = (data[i] - ema) * multiplier + ema
+    }
+    return ema
+  }
+
+  const ema12 = calculateEMA(closePrices, 12)
+  const ema26 = calculateEMA(closePrices, 26)
+  const macd = ema12 && ema26 ? ema12 - ema26 : undefined
+
+  // Bollinger Bands (20 periods, 2 std dev)
   let bollingerUpper: number | undefined
   let bollingerLower: number | undefined
   let bollingerMiddle: number | undefined
-  if (closes.length >= 20) {
-    const last20 = closes.slice(-20)
+  if (closePrices.length >= 20) {
+    const last20 = closePrices.slice(-20)
     bollingerMiddle = last20.reduce((a, b) => a + b, 0) / 20
-    const bb_variance = last20.reduce((sum, c) => sum + Math.pow(c - bollingerMiddle!, 2), 0) / 20
-    const bb_stdDev = Math.sqrt(bb_variance)
-    bollingerUpper = bollingerMiddle + 2 * bb_stdDev
-    bollingerLower = bollingerMiddle - 2 * bb_stdDev
+    const bbStdDev = Math.sqrt(last20.reduce((sum, p) => sum + Math.pow(p - bollingerMiddle!, 2), 0) / 20)
+    bollingerUpper = bollingerMiddle + 2 * bbStdDev
+    bollingerLower = bollingerMiddle - 2 * bbStdDev
   }
 
-  // ATR (Average True Range) - 14 days
+  // ATR (14 periods)
   let atr: number | undefined
   if (prices.length >= 15) {
     const trueRanges: number[] = []
-    for (let i = 1; i < Math.min(15, prices.length); i++) {
+    for (let i = prices.length - 14; i < prices.length; i++) {
       const high = prices[i].high
       const low = prices[i].low
       const prevClose = prices[i - 1].close
       const tr = Math.max(high - low, Math.abs(high - prevClose), Math.abs(low - prevClose))
       trueRanges.push(tr)
     }
-    atr = trueRanges.reduce((a, b) => a + b, 0) / trueRanges.length
+    atr = trueRanges.reduce((a, b) => a + b, 0) / 14
   }
 
   // Risk Level based on volatility
@@ -739,30 +742,7 @@ export function calculateIndicators(prices: HistoricalPrice[]): StockIndicators 
     atr,
     stdDev: stdDev * 100,
     variance: variance * 10000,
-    dailyReturns: returns.slice(-30).map((r) => r * 100),
+    dailyReturns: returns.map((r) => r * 100),
     riskLevel,
-  }
-}
-
-// Search stocks
-export async function searchStocks(query: string): Promise<{ symbol: string; name: string }[]> {
-  try {
-    const url = `https://brapi.dev/api/available?search=${encodeURIComponent(query)}&token=${BRAPI_TOKEN}`
-
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    })
-
-    if (!response.ok) return []
-
-    const data = await response.json()
-    return (data.stocks || []).slice(0, 20).map((s: string) => ({
-      symbol: s,
-      name: s,
-    }))
-  } catch (error) {
-    console.error("[v0] Search error:", error)
-    return []
   }
 }

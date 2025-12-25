@@ -65,13 +65,7 @@ scripts/008_create_notificacoes.sql
 
 **Copie TODO o conteudo de cada arquivo, cole no editor e clique em "Run".**
 
-### 1.3 Executar Script de Investimentos
-
-1. No SQL Editor, crie uma nova query
-2. Copie o conteudo de `scripts/005_investments_tables.sql`
-3. Execute para criar as tabelas de investimentos
-
-### 1.4 Obter Credenciais
+### 1.3 Obter Credenciais
 
 1. Va em **Settings** > **API**
 2. Copie os valores:
@@ -79,7 +73,7 @@ scripts/008_create_notificacoes.sql
    - **anon public** → `NEXT_PUBLIC_SUPABASE_ANON_KEY`
    - **service_role** → `SUPABASE_SERVICE_ROLE_KEY`
 
-### 1.5 Configurar Autenticacao
+### 1.4 Configurar Autenticacao
 
 1. Va em **Authentication** > **URL Configuration**
 2. Em **Site URL**, coloque sua URL de producao
@@ -97,7 +91,7 @@ Crie um arquivo `.env.local` na raiz do projeto com as seguintes variaveis:
 
 ```env
 # ========================================
-# SUPABASE (Obrigatório)
+# SUPABASE (Obrigatorio)
 # ========================================
 NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key_aqui
@@ -107,40 +101,100 @@ SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key_aqui
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=
 
 # ========================================
-# APIS DE COTACOES (Opcional mas recomendado)
+# APIS DE COTACOES (Opcional - Sistema usa Yahoo Finance como fallback)
 # ========================================
 
-# Brapi - API principal para cotacoes BR (https://brapi.dev)
+# Brapi - API para cotacoes BR (https://brapi.dev)
 # Obtenha seu token gratuito em: https://brapi.dev/dashboard
-BRAPI_TOKEN=sUCSXQ4LUHgtgLpa5WmZ4H
+# IMPORTANTE: Use Authorization header com Bearer token
+# Exemplo de uso correto da API:
+#   Authorization: Bearer seu_token_aqui
+#   GET https://brapi.dev/api/quote/PETR4,MGLU3?fundamental=true
+BRAPI_TOKEN=seu_token_brapi_aqui
 
 # Alpha Vantage - Fallback para cotacoes (https://www.alphavantage.co)
 # Obtenha sua key gratuita em: https://www.alphavantage.co/support/#api-key
-ALPHA_VANTAGE_API_KEY=demo
+ALPHA_VANTAGE_API_KEY=sua_key_aqui
 
 # Finnhub - Fallback adicional (https://finnhub.io)
 # Obtenha sua key gratuita em: https://finnhub.io/register
-FINNHUB_API_KEY=
+FINNHUB_API_KEY=sua_key_aqui
 
 # ========================================
 # APIS USADAS AUTOMATICAMENTE (Sem config necessaria)
 # ========================================
-# - Yahoo Finance: Usado como fallback principal (sem API key)
-# - HG Brasil: Usado como fallback secundario (demo key)
+# - Yahoo Finance: Usado como API PRINCIPAL (sem API key necessaria)
+# - HG Brasil: Usado como fallback secundario (demo key incluida)
 ```
 
 ### Variaveis de Ambiente na Vercel
 
 No painel do projeto na Vercel, va em **Settings** > **Environment Variables** e adicione:
 
-| Nome da Variavel | Descricao | Obrigatorio |
-|-----------------|-----------|-------------|
+| Nome da Variavel | Valor | Obrigatorio |
+|-----------------|-------|-------------|
 | `NEXT_PUBLIC_SUPABASE_URL` | URL do projeto Supabase | Sim |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave anonima do Supabase | Sim |
 | `SUPABASE_SERVICE_ROLE_KEY` | Chave de servico do Supabase | Sim |
-| `BRAPI_TOKEN` | Token da API Brapi para cotacoes | Recomendado |
-| `ALPHA_VANTAGE_API_KEY` | Key do Alpha Vantage (fallback) | Opcional |
-| `FINNHUB_API_KEY` | Key do Finnhub (fallback) | Opcional |
+| `BRAPI_TOKEN` | Token da API Brapi (ex: sUCSXQ4LUHgtgLpa5WmZ4H) | Opcional |
+| `ALPHA_VANTAGE_API_KEY` | Key do Alpha Vantage | Opcional |
+| `FINNHUB_API_KEY` | Key do Finnhub | Opcional |
+
+**NOTA:** O sistema funciona SEM nenhuma API key configurada! Yahoo Finance e usado como fallback principal.
+
+---
+
+## Sistema de APIs de Cotacoes
+
+O sistema utiliza multiplas APIs com fallback automatico:
+
+### Ordem de Prioridade:
+1. **Yahoo Finance** (Principal - SEM API key necessaria)
+2. **Brapi** (Se BRAPI_TOKEN configurado) - **CORRIGIDO: Agora usa Authorization header**
+3. **HG Brasil** (Demo key incluida)
+4. **Alpha Vantage** (Se ALPHA_VANTAGE_API_KEY configurado)
+5. **Finnhub** (Se FINNHUB_API_KEY configurado)
+
+### Como funciona:
+- O sistema tenta a primeira API disponivel
+- Se falhar, automaticamente tenta a proxima
+- Logs no console indicam qual API foi usada: `[v0] Got quote from Yahoo Finance for PETR4`
+- Se todas falharem, o preco medio cadastrado e usado
+
+### Brapi - Uso Correto da API:
+
+A API Brapi requer autenticacao via **Authorization header** (nao query parameter):
+
+```javascript
+// ✅ CORRETO
+fetch('https://brapi.dev/api/quote/PETR4', {
+  headers: {
+    'Authorization': 'Bearer sUCSXQ4LUHgtgLpa5WmZ4H',
+    'Accept': 'application/json'
+  }
+})
+
+// ❌ ERRADO (causava 404)
+fetch('https://brapi.dev/api/quote/PETR4?token=sUCSXQ4LUHgtgLpa5WmZ4H')
+```
+
+**Endpoints Disponiveis:**
+- `GET /api/quote/{tickers}` - Cotacoes (ex: PETR4,MGLU3)
+- `GET /api/quote/list` - Listar todos os ativos
+- `GET /api/available` - Buscar ativos disponiveis
+- Parametros opcionais: `?fundamental=true&dividends=true&range=5d&interval=1d`
+
+### Tokens e Keys:
+
+| API | Variavel de Ambiente | Como obter | Limite gratuito |
+|-----|---------------------|------------|-----------------|
+| Yahoo Finance | Nenhuma | Automatico | Ilimitado* |
+| Brapi | `BRAPI_TOKEN` | https://brapi.dev/dashboard | 1000 req/dia |
+| HG Brasil | Nenhuma | Automatico (demo) | 5 req/min |
+| Alpha Vantage | `ALPHA_VANTAGE_API_KEY` | https://www.alphavantage.co/support/#api-key | 5 req/min |
+| Finnhub | `FINNHUB_API_KEY` | https://finnhub.io/register | 60 req/min |
+
+*Yahoo Finance pode ter rate limiting em uso intenso
 
 ---
 
@@ -178,124 +232,28 @@ vercel --prod
 
 ---
 
-## Passo 4: Deploy no Render (Gratuito)
-
-### 4.1 Preparar Repositorio
-
-1. Faca push do codigo para um repositorio GitHub
-2. Certifique-se que o `.gitignore` inclui `.env.local`
-
-### 4.2 Criar Web Service no Render
-
-1. Acesse https://render.com e faca login
-2. Clique em **New** > **Web Service**
-3. Conecte seu repositorio GitHub
-4. Configure:
-   - **Name**: fincontrol (ou outro nome)
-   - **Region**: Oregon (ou mais proxima)
-   - **Branch**: main
-   - **Runtime**: Node
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-
-### 4.3 Configurar Variaveis de Ambiente
-
-No painel do Render, va em **Environment** e adicione as variaveis listadas na secao 2.
-
----
-
-## Sistema de APIs de Cotacoes
-
-O sistema utiliza multiplas APIs com fallback automatico:
-
-### Ordem de Prioridade:
-1. **Yahoo Finance** (Principal - sem API key necessaria)
-2. **Brapi** (Com token - melhor para acoes BR)
-3. **HG Brasil** (Demo key incluida)
-4. **Alpha Vantage** (Fallback com API key)
-5. **Finnhub** (Fallback adicional)
-
-### Como funciona:
-- Se a primeira API falhar, o sistema automaticamente tenta a proxima
-- Logs no console indicam qual API foi usada: `[v0] Got quote from Yahoo Finance for PETR4`
-- Se todas falharem, o preco medio cadastrado e usado como fallback
-
-### Tokens e Keys:
-
-| API | Como obter | Limite gratuito |
-|-----|-----------|-----------------|
-| Brapi | https://brapi.dev/dashboard | 1000 req/dia |
-| Alpha Vantage | https://www.alphavantage.co/support/#api-key | 5 req/min |
-| Finnhub | https://finnhub.io/register | 60 req/min |
-| Yahoo Finance | Sem necessidade | Ilimitado* |
-| HG Brasil | Demo incluida | 5 req/min |
-
-*Yahoo Finance pode ter rate limiting em uso intenso
-
----
-
-## Verificacao Final
-
-Apos o deploy, verifique:
-
-- [ ] Landing page carrega corretamente
-- [ ] Pagina de login funciona
-- [ ] Cadastro de usuario funciona
-- [ ] Email de confirmacao e enviado
-- [ ] Dashboard carrega apos login
-- [ ] Animacoes funcionam corretamente
-- [ ] Dados sao salvos no banco
-- [ ] Graficos aparecem corretamente
-- [ ] Investimentos exibem cotacoes (verificar logs: `[v0] Got quote from...`)
-- [ ] Modal de detalhes do ativo abre corretamente
-- [ ] Exportacao Excel/CSV funciona
-- [ ] Headers de seguranca estao ativos (verificar no DevTools > Network)
-
----
-
 ## Troubleshooting
+
+### Erro 404 nas cotacoes (Brapi) - CORRIGIDO
+
+- **Causa:** Estava usando query parameter `?token=` em vez do Authorization header
+- **Solucao:** Codigo atualizado para usar `Authorization: Bearer {token}`
+- **Teste:** Verifique os logs: `[v0] Brapi: Success for PETR4 - Price: 36.50`
+
+### Cotacoes nao carregam
+- Verifique os logs: `[v0] All APIs failed for ticker: XXXX`
+- O Yahoo Finance deve funcionar como fallback automatico
+- Teste manualmente: `https://query1.finance.yahoo.com/v8/finance/chart/PETR4.SA`
 
 ### Erro de CORS
 - Verifique se a URL do site esta nas Redirect URLs do Supabase
 
-### Erro de Autenticacao
-- Confirme que as variaveis de ambiente estao corretas
-- Verifique se o script SQL foi executado
-
-### Pagina em branco
-- Verifique os logs do servidor
-- Confirme que o build foi bem sucedido
-
-### Erro 404 em /rest/v1/notificacoes
-- Execute o script `scripts/008_create_notificacoes.sql` no SQL Editor do Supabase
-
-### Erro 401 nas cotacoes (Brapi)
-- Verifique se o `BRAPI_TOKEN` esta configurado corretamente
-- O sistema usara Yahoo Finance como fallback automaticamente
-
-### Cotacoes nao carregam
-- Verifique os logs: `[v0] All APIs failed for ticker: XXXX`
-- Teste manualmente: `https://brapi.dev/api/quote/PETR4?token=SEU_TOKEN`
-- O Yahoo Finance deve funcionar como fallback
-
-### Modal de ativo nao aparece
-- Limpe o cache do navegador (Ctrl+Shift+R)
-- Verifique se o componente AssetDetailModal esta importado corretamente
-
----
-
-## Custos Estimados
-
-| Servico | Plano | Custo |
-|---------|-------|-------|
-| Supabase | Free | R$ 0 |
-| Render | Free | R$ 0 |
-| Vercel | Hobby | R$ 0 |
-| Brapi (Cotacoes) | Free | R$ 0 |
-| Yahoo Finance | Free | R$ 0 |
-| Hostinger | Premium | ~R$ 15/mes |
-
-**Total minimo: R$ 0/mes** (usando Supabase + Render/Vercel + APIs gratuitas)
+### Modais nao aparecem ou ficam cortados - CORRIGIDO
+- **Solucao:** Todos os modais foram atualizados com:
+  - Posicionamento centralizado (top-1/2, left-1/2, translate)
+  - Dimensoes responsivas (max-w-[95vw], max-h-[95vh])
+  - Scrollbar personalizada e acessivel
+  - Formularios com containers rolaveis independentes
 
 ---
 
@@ -303,8 +261,7 @@ Apos o deploy, verifique:
 
 - [Documentacao Supabase](https://supabase.com/docs)
 - [Documentacao Vercel](https://vercel.com/docs)
-- [Documentacao Render](https://render.com/docs)
-- [API Brapi (Cotacoes)](https://brapi.dev)
+- [API Brapi](https://brapi.dev)
+- [Brapi Documentacao da API](https://brapi.dev/docs)
 - [Yahoo Finance API](https://query1.finance.yahoo.com)
-- [Alpha Vantage API](https://www.alphavantage.co/documentation/)
 - [Next.js Docs](https://nextjs.org/docs)
