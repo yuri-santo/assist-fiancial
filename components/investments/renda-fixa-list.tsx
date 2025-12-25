@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Trash2, Edit2, TrendingUp, Clock, Loader2 } from "lucide-react"
+import { Trash2, Edit2, TrendingUp, Clock, Loader2, Eye } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
 import { TIPOS_RENDA_FIXA, INDEXADORES } from "@/lib/api/brapi"
 import type { RendaFixa } from "@/lib/types"
@@ -23,6 +23,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { EditRendaFixaDialog } from "./edit-renda-fixa-dialog"
+import { RendaFixaDetailDialog } from "./renda-fixa-detail-dialog"
 
 interface RendaFixaListProps {
   investimentos: RendaFixa[]
@@ -31,6 +32,7 @@ interface RendaFixaListProps {
 export function RendaFixaList({ investimentos }: RendaFixaListProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editInvestimento, setEditInvestimento] = useState<RendaFixa | null>(null)
+  const [detailInvestimento, setDetailInvestimento] = useState<RendaFixa | null>(null)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -78,14 +80,14 @@ export function RendaFixaList({ investimentos }: RendaFixaListProps) {
                   <TableHead className="text-right text-muted-foreground">Atual</TableHead>
                   <TableHead className="text-right text-muted-foreground">Rendimento</TableHead>
                   <TableHead className="text-right text-muted-foreground">Vencimento</TableHead>
-                  <TableHead className="w-20"></TableHead>
+                  <TableHead className="w-28"></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 <AnimatePresence>
                   {investimentos.map((inv, index) => {
-                    const tipoInfo = TIPOS_RENDA_FIXA[inv.tipo]
-                    const indexadorInfo = inv.indexador ? INDEXADORES[inv.indexador] : null
+                    const tipoInfo = TIPOS_RENDA_FIXA[inv.tipo as keyof typeof TIPOS_RENDA_FIXA]
+                    const indexadorInfo = inv.indexador ? INDEXADORES[inv.indexador as keyof typeof INDEXADORES] : null
 
                     return (
                       <motion.tr
@@ -94,7 +96,8 @@ export function RendaFixaList({ investimentos }: RendaFixaListProps) {
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: 20 }}
                         transition={{ duration: 0.3, delay: index * 0.05 }}
-                        className="border-primary/10 hover:bg-primary/5 transition-colors"
+                        className="border-primary/10 hover:bg-primary/5 transition-colors cursor-pointer"
+                        onClick={() => setDetailInvestimento(inv)}
                       >
                         <TableCell>
                           <div>
@@ -153,7 +156,15 @@ export function RendaFixaList({ investimentos }: RendaFixaListProps) {
                           )}
                         </TableCell>
                         <TableCell>
-                          <div className="flex gap-1">
+                          <div className="flex gap-1" onClick={(e) => e.stopPropagation()}>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              onClick={() => setDetailInvestimento(inv)}
+                              className="text-muted-foreground hover:text-primary hover:bg-primary/10"
+                            >
+                              <Eye className="h-4 w-4" />
+                            </Button>
                             <Button
                               variant="ghost"
                               size="icon"
@@ -209,6 +220,14 @@ export function RendaFixaList({ investimentos }: RendaFixaListProps) {
           investimento={editInvestimento}
           open={!!editInvestimento}
           onOpenChange={(open) => !open && setEditInvestimento(null)}
+        />
+      )}
+
+      {detailInvestimento && (
+        <RendaFixaDetailDialog
+          investimento={detailInvestimento}
+          open={!!detailInvestimento}
+          onOpenChange={(open) => !open && setDetailInvestimento(null)}
         />
       )}
     </>
