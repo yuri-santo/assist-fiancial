@@ -20,17 +20,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const { data: profile } = await supabase.from("profiles").select("*").eq("id", user.id).single()
 
   return (
-    <div className="min-h-screen bg-background noise-overlay relative">
-      {/* Grid pattern background */}
-      <div className="fixed inset-0 grid-pattern opacity-30 pointer-events-none" />
-
-      {/* Gradient orbs for ambient lighting */}
-      <div className="fixed top-0 left-1/4 w-96 h-96 bg-primary/10 rounded-full blur-3xl pointer-events-none" />
-      <div className="fixed bottom-0 right-1/4 w-80 h-80 bg-accent/10 rounded-full blur-3xl pointer-events-none" />
+    <div className="min-h-screen bg-background relative">
+      {/* Simplified background for performance */}
+      <div className="fixed inset-0 bg-gradient-to-br from-primary/5 via-transparent to-accent/5 pointer-events-none" />
 
       <Sidebar />
       <div className="lg:pl-64 relative">
-        <Header profile={profile as Profile | null} />
+        <Header profile={profile as Profile | null} userId={user.id} />
         <main className="p-4 lg:p-6">{children}</main>
       </div>
     </div>

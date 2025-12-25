@@ -13,6 +13,7 @@ import { InvestmentsOverview } from "@/components/reports/investments-overview"
 import { GoalsProgress } from "@/components/reports/goals-progress"
 import { CashFlowChart } from "@/components/reports/cashflow-chart"
 import { getCotacoes } from "@/lib/api/brapi"
+import { ImportButton } from "@/components/reports/import-button"
 
 export default async function RelatoriosPage({
   searchParams,
@@ -153,6 +154,7 @@ export default async function RelatoriosPage({
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
           <PeriodSelector mes={mes} ano={ano} />
+          <ImportButton userId={user.id} />
           <ExportButton despesas={despesas} receitas={receitas} categorias={categorias} mes={mes} ano={ano} />
         </div>
       </div>

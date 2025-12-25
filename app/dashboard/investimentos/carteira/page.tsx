@@ -1,6 +1,6 @@
 import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { TrendingUp, TrendingDown, Wallet, BarChart3, Activity } from "lucide-react"
+import { TrendingUp, TrendingDown, Wallet, BarChart3, Activity, Shield, PiggyBank } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
 import type { RendaVariavel, RendaFixa } from "@/lib/types"
 import { getCotacoes, TIPOS_RENDA_VARIAVEL, TIPOS_RENDA_FIXA } from "@/lib/api/brapi"
@@ -17,25 +17,34 @@ export default async function CarteiraPage() {
 
   if (!user) return null
 
-  // Buscar todos os dados
-  const [rendaVariavelRes, rendaFixaRes, caixinhasRes, objetivosRes] = await Promise.all([
+  const [rendaVariavelRes, rendaFixaRes, caixinhasRes, objetivosRes, reservaRes, expensesRes] = await Promise.all([
     supabase.from("renda_variavel").select("*").eq("user_id", user.id),
     supabase.from("renda_fixa").select("*").eq("user_id", user.id),
     supabase.from("caixinhas").select("*").eq("user_id", user.id),
     supabase.from("objetivos").select("*").eq("user_id", user.id),
+    supabase.from("reserva_emergencia").select("*").eq("user_id", user.id).single(),
+    supabase.from("despesas").select("valor").eq("user_id", user.id),
   ])
 
   const rendaVariavel = (rendaVariavelRes.data || []) as RendaVariavel[]
   const rendaFixa = (rendaFixaRes.data || []) as RendaFixa[]
   const caixinhas = caixinhasRes.data || []
   const objetivos = objetivosRes.data || []
+  const reserva = reservaRes.data
+  const despesas = expensesRes.data || []
 
-  // Buscar cotações em tempo real
+  // Calcular media de despesas mensais
+  const mediaDespesas =
+    despesas.length > 0
+      ? despesas.reduce((sum, d) => sum + d.valor, 0) / Math.max(1, Math.ceil(despesas.length / 30))
+      : 0
+
+  // Buscar cotacoes em tempo real
   const tickers = rendaVariavel.map((a) => a.ticker)
   const cotacoes = await getCotacoes(tickers)
   const cotacoesMap = new Map(cotacoes.map((c) => [c.symbol, c]))
 
-  // Calcular valores de renda variável
+  // Calcular valores de renda variavel
   const rvComCotacao = rendaVariavel.map((ativo) => {
     const cotacao = cotacoesMap.get(ativo.ticker)
     const cotacaoAtual = cotacao?.regularMarketPrice || ativo.preco_medio
@@ -51,8 +60,9 @@ export default async function CarteiraPage() {
   const totalRendaFixa = rendaFixa.reduce((sum, inv) => sum + inv.valor_atual, 0)
   const totalCaixinhas = caixinhas.reduce((sum, c) => sum + (c.saldo || 0), 0)
   const totalObjetivos = objetivos.reduce((sum, o) => sum + (o.valor_atual || 0), 0)
+  const totalReserva = reserva?.valor_atual || 0
 
-  const patrimonioTotal = totalRendaVariavel + totalRendaFixa + totalCaixinhas + totalObjetivos
+  const patrimonioTotal = totalRendaVariavel + totalRendaFixa + totalCaixinhas + totalReserva
 
   // Rentabilidade
   const investidoRV = rendaVariavel.reduce((sum, a) => sum + a.quantidade * a.preco_medio, 0)
@@ -61,15 +71,18 @@ export default async function CarteiraPage() {
   const lucroTotal = totalRendaVariavel + totalRendaFixa - totalInvestido
   const rentabilidadeTotal = totalInvestido > 0 ? (lucroTotal / totalInvestido) * 100 : 0
 
-  // Dados para gráficos
+  // Meses de reserva cobertos
+  const mesesCobertos = mediaDespesas > 0 ? totalReserva / mediaDespesas : 0
+
+  // Dados para graficos - incluindo reserva de emergencia
   const alocacaoData = [
-    { name: "Renda Variável", value: totalRendaVariavel, color: "#3b82f6" },
+    { name: "Renda Variavel", value: totalRendaVariavel, color: "#3b82f6" },
     { name: "Renda Fixa", value: totalRendaFixa, color: "#10b981" },
     { name: "Caixinhas", value: totalCaixinhas, color: "#f59e0b" },
-    { name: "Objetivos", value: totalObjetivos, color: "#8b5cf6" },
+    { name: "Reserva Emergencia", value: totalReserva, color: "#ef4444" },
   ].filter((d) => d.value > 0)
 
-  // Agrupar renda variável por tipo
+  // Agrupar renda variavel por tipo
   const rvPorTipo = rvComCotacao.reduce(
     (acc, a) => {
       if (!acc[a.tipo]) acc[a.tipo] = 0
@@ -179,14 +192,56 @@ export default async function CarteiraPage() {
         </Card>
       </div>
 
-      {/* Gráficos de alocação */}
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <Card className="card-3d glass-card overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent" />
+          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Reserva de Emergencia</CardTitle>
+            <Shield className="h-5 w-5 text-red-400" />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className="text-2xl font-bold">{formatCurrency(totalReserva)}</div>
+            <p
+              className={`text-sm ${mesesCobertos >= 6 ? "text-emerald-400" : mesesCobertos >= 3 ? "text-amber-400" : "text-red-400"}`}
+            >
+              {mesesCobertos.toFixed(1)} meses de despesas cobertos
+            </p>
+          </CardContent>
+        </Card>
+
+        <Card className="card-3d glass-card overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />
+          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Caixinhas</CardTitle>
+            <PiggyBank className="h-5 w-5 text-amber-400" />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className="text-2xl font-bold">{formatCurrency(totalCaixinhas)}</div>
+            <p className="text-sm text-muted-foreground">{caixinhas.length} caixinhas ativas</p>
+          </CardContent>
+        </Card>
+
+        <Card className="card-3d glass-card overflow-hidden">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent" />
+          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <CardTitle className="text-sm font-medium text-muted-foreground">Objetivos</CardTitle>
+            <Activity className="h-5 w-5 text-purple-400" />
+          </CardHeader>
+          <CardContent className="relative">
+            <div className="text-2xl font-bold">{formatCurrency(totalObjetivos)}</div>
+            <p className="text-sm text-muted-foreground">{objetivos.length} objetivos em andamento</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Graficos de alocacao */}
       <div className="grid gap-6 lg:grid-cols-2">
         <PatrimonioChart data={alocacaoData} />
         <AlocacaoRadar
           rendaVariavel={totalRendaVariavel}
           rendaFixa={totalRendaFixa}
           caixinhas={totalCaixinhas}
-          objetivos={totalObjetivos}
+          objetivos={totalReserva}
         />
       </div>
 

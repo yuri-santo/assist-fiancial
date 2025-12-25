@@ -26,6 +26,23 @@ export interface BrapiResponse {
   took: string
 }
 
+export interface BrapiHistoricalPrice {
+  date: number
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  adjustedClose: number
+}
+
+export interface BrapiHistoricalResponse {
+  results: {
+    symbol: string
+    historicalDataPrice: BrapiHistoricalPrice[]
+  }[]
+}
+
 // Buscar cotação de um ou mais ativos
 export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
   if (tickers.length === 0) return []
@@ -56,13 +73,32 @@ export async function getCotacao(ticker: string): Promise<BrapiQuote | null> {
   return quotes[0] || null
 }
 
+// Buscar historico de preços
+export async function getHistorico(
+  ticker: string,
+  range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" = "1mo",
+): Promise<BrapiHistoricalPrice[]> {
+  try {
+    const response = await fetch(`${BRAPI_BASE_URL}/quote/${ticker}?range=${range}&interval=1d&fundamental=false`, {
+      next: { revalidate: 3600 },
+    })
+
+    if (!response.ok) return []
+
+    const data: BrapiHistoricalResponse = await response.json()
+    return data.results?.[0]?.historicalDataPrice || []
+  } catch (error) {
+    console.error("[v0] Error fetching historical data:", error)
+    return []
+  }
+}
+
 // Buscar lista de ativos disponíveis
 export async function searchAtivos(query: string): Promise<{ symbol: string; name: string }[]> {
   try {
-    const response = await fetch(
-      `${BRAPI_BASE_URL}/available?search=${encodeURIComponent(query)}`,
-      { next: { revalidate: 3600 } }, // Cache por 1 hora
-    )
+    const response = await fetch(`${BRAPI_BASE_URL}/available?search=${encodeURIComponent(query)}`, {
+      next: { revalidate: 3600 },
+    })
 
     if (!response.ok) return []
 

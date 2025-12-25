@@ -210,3 +210,25 @@ export interface CotacaoAPI {
   regularMarketPreviousClose: number
   logourl?: string
 }
+
+export interface Notificacao {
+  id: string
+  user_id: string
+  tipo: "alerta" | "lembrete" | "conquista" | "dica"
+  titulo: string
+  mensagem: string
+  lida: boolean
+  data: string
+  link?: string
+  created_at: string
+}
+
+export interface SaudeFinanceira {
+  score: number // 0-100
+  status: "critico" | "atencao" | "bom" | "excelente"
+  fatores: {
+    nome: string
+    valor: number
+    peso: number
+  }[]
+}
