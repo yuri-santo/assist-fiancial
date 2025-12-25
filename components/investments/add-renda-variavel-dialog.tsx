@@ -17,17 +17,10 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Loader2, Search, RefreshCw, TrendingUp, TrendingDown, DollarSign, Calculator } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import {
-  TIPOS_RENDA_VARIAVEL,
-  SETORES,
-  MOEDAS,
-  type MERCADOS,
-  searchAtivos,
-  getCotacao,
-  getCotacaoHistorica,
-} from "@/lib/api/brapi"
-import { getCryptoCotacao, getCryptoHistorica, searchCryptos } from "@/lib/api/crypto-service"
+import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, type MERCADOS, searchAtivos } from "@/lib/api/brapi"
+import { searchCryptos } from "@/lib/api/crypto-service"
 import { formatCurrency } from "@/lib/utils/currency"
+import { getUnifiedQuote, getHistoricalPrice } from "@/lib/api/unified-quote-service"
 
 export function AddRendaVariavelDialog() {
   const formId = useId()
@@ -88,106 +81,70 @@ export function AddRendaVariavelDialog() {
     setFormData((prev) => ({ ...prev, ticker }))
     setSearchResults([])
     setSearchQuery("")
-    await fetchCotacao(ticker, formData.data_compra)
+    await fetchCotacao()
   }
 
-  const fetchCotacao = async (ticker: string, purchaseDate?: string) => {
-    if (!ticker) return
+  const fetchCotacao = useCallback(async () => {
+    if (!formData.ticker) return
+
     setIsLoadingCotacao(true)
     setApiError(null)
+
     try {
+      const ticker = formData.ticker.toUpperCase()
+      const purchaseDate = formData.data_compra
       const useHistoricalPrice = purchaseDate && purchaseDate !== new Date().toISOString().split("T")[0]
 
-      if (isCrypto) {
-        if (useHistoricalPrice) {
-          const historicalPrice = await getCryptoHistorica(
-            ticker.toUpperCase(),
-            purchaseDate!,
-            formData.moeda === "BRL" ? "BRL" : "USD",
-          )
-          if (historicalPrice) {
-            setCotacaoAtual(historicalPrice)
-            setVariacao(null)
-            setFormData((prev) => ({
-              ...prev,
-              preco_medio: historicalPrice.toFixed(8),
-            }))
-            console.log(`[v0] Using historical crypto price for ${purchaseDate}`)
-          } else {
-            // Fallback to current price
-            const cotacao = await getCryptoCotacao(ticker.toUpperCase(), formData.moeda === "BRL" ? "BRL" : "USD")
-            if (cotacao) {
-              setCotacaoAtual(cotacao.regularMarketPrice)
-              setVariacao(cotacao.regularMarketChangePercent)
-              setFormData((prev) => ({
-                ...prev,
-                preco_medio: cotacao.regularMarketPrice.toFixed(8),
-              }))
-              setApiError("Preço histórico indisponível. Usando cotação atual.")
-            }
-          }
+      const assetType = isCrypto ? "crypto" : "stock"
+      const currency = formData.moeda === "BRL" ? "BRL" : "USD"
+
+      if (useHistoricalPrice) {
+        const historicalPrice = await getHistoricalPrice(ticker, purchaseDate!, assetType, currency)
+
+        if (historicalPrice) {
+          setCotacaoAtual(historicalPrice)
+          setVariacao(null)
+          setFormData((prev) => ({
+            ...prev,
+            preco_medio: isCrypto ? historicalPrice.toFixed(8) : historicalPrice.toFixed(2),
+          }))
+          console.log(`[v0] Using historical price for ${purchaseDate}: ${historicalPrice}`)
         } else {
-          const cotacao = await getCryptoCotacao(ticker.toUpperCase(), formData.moeda === "BRL" ? "BRL" : "USD")
-          if (cotacao) {
-            setCotacaoAtual(cotacao.regularMarketPrice)
-            setVariacao(cotacao.regularMarketChangePercent)
+          const quote = await getUnifiedQuote(ticker, assetType, currency)
+          if (quote) {
+            setCotacaoAtual(quote.price)
+            setVariacao(quote.changePercent)
             setFormData((prev) => ({
               ...prev,
-              preco_medio: cotacao.regularMarketPrice.toFixed(8),
+              preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
             }))
+            setApiError("Preço histórico indisponível. Usando cotação atual.")
           } else {
-            setCotacaoAtual(null)
-            setVariacao(null)
-            setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
+            setApiError("Não foi possível obter a cotação. Informe o preço manualmente.")
           }
         }
       } else {
-        if (useHistoricalPrice) {
-          const historicalPrice = await getCotacaoHistorica(ticker.toUpperCase(), purchaseDate!)
-          if (historicalPrice) {
-            setCotacaoAtual(historicalPrice)
-            setVariacao(null)
-            setFormData((prev) => ({
-              ...prev,
-              preco_medio: historicalPrice.toFixed(2),
-            }))
-            console.log(`[v0] Using historical stock price for ${purchaseDate}`)
-          } else {
-            // Fallback to current price
-            const cotacao = await getCotacao(ticker.toUpperCase())
-            if (cotacao) {
-              setCotacaoAtual(cotacao.regularMarketPrice)
-              setVariacao(cotacao.regularMarketChangePercent)
-              setFormData((prev) => ({
-                ...prev,
-                preco_medio: cotacao.regularMarketPrice.toFixed(2),
-              }))
-              setApiError("Preço histórico indisponível. Usando cotação atual.")
-            }
-          }
+        const quote = await getUnifiedQuote(ticker, assetType, currency)
+
+        if (quote) {
+          setCotacaoAtual(quote.price)
+          setVariacao(quote.changePercent)
+          setFormData((prev) => ({
+            ...prev,
+            preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
+          }))
+          console.log(`[v0] Quote from ${quote.source}: ${quote.price}`)
         } else {
-          const cotacao = await getCotacao(ticker.toUpperCase())
-          if (cotacao) {
-            setCotacaoAtual(cotacao.regularMarketPrice)
-            setVariacao(cotacao.regularMarketChangePercent)
-            setFormData((prev) => ({
-              ...prev,
-              preco_medio: cotacao.regularMarketPrice.toFixed(2),
-            }))
-          } else {
-            setCotacaoAtual(null)
-            setVariacao(null)
-            setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
-          }
+          setApiError("Não foi possível obter a cotação de nenhuma API. Informe o preço manualmente.")
         }
       }
-    } catch {
-      setCotacaoAtual(null)
-      setVariacao(null)
-      setApiError("Erro na API. Digite o preço manualmente.")
+    } catch (error) {
+      console.error("[v0] Error fetching quote:", error)
+      setApiError("Erro ao buscar cotação. Verifique o ticker e tente novamente.")
+    } finally {
+      setIsLoadingCotacao(false)
     }
-    setIsLoadingCotacao(false)
-  }
+  }, [formData.ticker, formData.data_compra, formData.moeda, isCrypto])
 
   useEffect(() => {
     if (calcMode === "value" && formData.valor_investido && formData.preco_medio) {
@@ -382,7 +339,7 @@ export function AddRendaVariavelDialog() {
                   type="button"
                   variant="outline"
                   size="icon"
-                  onClick={() => fetchCotacao(formData.ticker)}
+                  onClick={() => fetchCotacao()}
                   disabled={!formData.ticker || isLoadingCotacao}
                   className="shrink-0"
                   aria-label="Buscar cotação"
@@ -522,7 +479,7 @@ export function AddRendaVariavelDialog() {
                 onChange={(e) => {
                   setFormData((prev) => ({ ...prev, data_compra: e.target.value }))
                   if (formData.ticker) {
-                    fetchCotacao(formData.ticker, e.target.value)
+                    fetchCotacao()
                   }
                 }}
                 className="border-primary/20 bg-background"

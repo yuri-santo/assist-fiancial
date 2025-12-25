@@ -118,7 +118,9 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
                             {tipoInfo?.label || ativo.tipo}
                           </Badge>
                         </TableCell>
-                        <TableCell className="text-right">{ativo.quantidade}</TableCell>
+                        <TableCell className="text-right">
+                          {ativo.tipo === "cripto" ? Number(ativo.quantidade).toFixed(8) : ativo.quantidade}
+                        </TableCell>
                         <TableCell className="text-right">{formatCurrency(ativo.preco_medio)}</TableCell>
                         <TableCell className="text-right font-medium">
                           {formatCurrency(ativo.cotacao_atual || ativo.preco_medio)}
