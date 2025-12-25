@@ -125,55 +125,19 @@ export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
 
   const results: BrapiQuote[] = []
 
-  // Try Brapi first if token is available
-  if (BRAPI_TOKEN) {
-    try {
-      const tickerList = tickers.join(",")
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 8000)
+  console.log(`[v0] Fetching ${tickers.length} tickers sequentially...`)
 
-      const url = `${BRAPI_BASE_URL}/quote/${tickerList}?fundamental=false`
-      console.log(`[v0] Brapi: Fetching ${tickers.length} tickers...`)
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        cache: "no-store",
-        headers: {
-          Authorization: `Bearer ${BRAPI_TOKEN}`,
-          Accept: "application/json",
-        },
-      })
-
-      clearTimeout(timeoutId)
-
-      if (response.ok) {
-        const data: BrapiResponse = await response.json()
-        if (data.results && data.results.length > 0) {
-          console.log(`[v0] Brapi: Got ${data.results.length} quotes`)
-          return data.results
-        }
-      } else {
-        console.error(`[v0] Brapi API error: ${response.status} ${response.statusText}`)
-        const errorText = await response.text()
-        console.error(`[v0] Brapi error response:`, errorText)
-      }
-    } catch (error) {
-      console.error("[v0] Brapi fetch error:", error)
-    }
-  } else {
-    console.log("[v0] Brapi: No token configured, using Yahoo Finance")
-  }
-
-  // Fallback to Yahoo Finance
-  console.log(`[v0] Falling back to Yahoo Finance for ${tickers.length} tickers...`)
-  for (const ticker of tickers.slice(0, 10)) {
-    const quote = await fetchFromYahoo(ticker)
+  for (const ticker of tickers) {
+    const quote = await getCotacao(ticker)
     if (quote) {
       results.push(quote)
     }
+    if (tickers.length > 1) {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    }
   }
 
-  console.log(`[v0] Yahoo Finance: Got ${results.length} quotes`)
+  console.log(`[v0] Got ${results.length} quotes from ${tickers.length} tickers`)
   return results
 }
 
@@ -450,3 +414,70 @@ export const SETORES = [
   "Agronegócio",
   "Outros",
 ] as const
+
+export async function getCotacaoHistorica(ticker: string, date: string): Promise<number | null> {
+  try {
+    // Convert date to timestamp range (start and end of day)
+    const targetDate = new Date(date)
+    const startTimestamp = Math.floor(targetDate.getTime() / 1000)
+    const endDate = new Date(targetDate)
+    endDate.setDate(endDate.getDate() + 1)
+    const endTimestamp = Math.floor(endDate.getTime() / 1000)
+
+    console.log(`[v0] Fetching historical price for ${ticker} on ${date}`)
+
+    // Try Yahoo Finance first
+    const cleanTicker = ticker.replace(".SA", "").toUpperCase()
+    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.SA?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d`
+
+    const response = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      const result = data.chart?.result?.[0]
+      if (result) {
+        const quote = result.indicators?.quote?.[0]
+        const closePrice = quote?.close?.[0]
+        if (closePrice && closePrice > 0) {
+          console.log(`[v0] Historical price for ${ticker} on ${date}: ${closePrice}`)
+          return closePrice
+        }
+      }
+    }
+
+    if (BRAPI_TOKEN) {
+      const historicalData = await getHistorico(ticker, "1mo")
+      if (historicalData.length > 0) {
+        // Find closest date
+        const targetTimestamp = targetDate.getTime() / 1000
+        let closestPrice: BrapiHistoricalPrice | null = null
+        let minDiff = Number.POSITIVE_INFINITY
+
+        for (const price of historicalData) {
+          const diff = Math.abs(price.date - targetTimestamp)
+          if (diff < minDiff) {
+            minDiff = diff
+            closestPrice = price
+          }
+        }
+
+        if (closestPrice && minDiff < 7 * 24 * 60 * 60) {
+          console.log(`[v0] Found closest historical price for ${ticker}: ${closestPrice.close}`)
+          return closestPrice.close
+        }
+      }
+    }
+
+    console.log(`[v0] No historical price found for ${ticker} on ${date}`)
+    return null
+  } catch (error) {
+    console.error(`[v0] Error fetching historical price for ${ticker}:`, error)
+    return null
+  }
+}

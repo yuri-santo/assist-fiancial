@@ -96,6 +96,36 @@ export async function searchCryptos(query: string): Promise<{ symbol: string; na
   }))
 }
 
+export async function getCryptoHistorica(
+  coin: string,
+  date: string,
+  currency: "BRL" | "USD" = "BRL",
+): Promise<number | null> {
+  try {
+    console.log(`[v0] Fetching historical crypto price for ${coin} on ${date} in ${currency}`)
+
+    // For crypto, if date is recent (within 7 days), use current price
+    const targetDate = new Date(date)
+    const now = new Date()
+    const daysDiff = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24))
+
+    if (daysDiff <= 7) {
+      const currentQuote = await getCryptoCotacao(coin, currency)
+      if (currentQuote) {
+        console.log(`[v0] Using current price for recent date: ${currentQuote.regularMarketPrice}`)
+        return currentQuote.regularMarketPrice
+      }
+    }
+
+    // For older dates, return null (Brapi doesn't provide historical crypto data in free tier)
+    console.log(`[v0] Historical crypto data not available for date ${date}`)
+    return null
+  } catch (error) {
+    console.error(`[v0] Error fetching historical crypto price:`, error)
+    return null
+  }
+}
+
 // Criptomoedas mais populares para fallback
 export const POPULAR_CRYPTOS = [
   "BTC",
