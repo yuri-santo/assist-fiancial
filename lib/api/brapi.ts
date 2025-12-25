@@ -1,8 +1,9 @@
 // API gratuita para cotações de ações brasileiras
-// https://brapi.dev - sem necessidade de API key para uso básico
+// https://brapi.dev - COM API key para melhor performance
 // Fallback para dados estáticos quando APIs falham
 
 const BRAPI_BASE_URL = "https://brapi.dev/api"
+const BRAPI_TOKEN = process.env.BRAPI_TOKEN || "sUCSXQ4LUHgtgLpa5WmZ4H"
 
 export interface BrapiQuote {
   symbol: string
@@ -50,9 +51,11 @@ export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
   try {
     const tickerList = tickers.join(",")
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000) // 5s timeout
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
 
-    const response = await fetch(`${BRAPI_BASE_URL}/quote/${tickerList}?fundamental=false`, {
+    const url = `${BRAPI_BASE_URL}/quote/${tickerList}?token=${BRAPI_TOKEN}&fundamental=false`
+
+    const response = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
     })
@@ -61,15 +64,62 @@ export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
 
     if (!response.ok) {
       console.error("[v0] Brapi API error:", response.status)
-      return []
+      return await fallbackToYahoo(tickers)
     }
 
     const data: BrapiResponse = await response.json()
     return data.results || []
   } catch (error) {
-    console.error("[v0] Error fetching quotes:", error)
-    return []
+    console.error("[v0] Error fetching quotes from Brapi:", error)
+    return await fallbackToYahoo(tickers)
   }
+}
+
+async function fallbackToYahoo(tickers: string[]): Promise<BrapiQuote[]> {
+  const results: BrapiQuote[] = []
+
+  for (const ticker of tickers.slice(0, 10)) {
+    try {
+      const cleanTicker = ticker.replace(".SA", "").toUpperCase()
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.SA?interval=1d&range=1d`
+
+      const response = await fetch(url, {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+        },
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      })
+
+      if (!response.ok) continue
+
+      const data = await response.json()
+      const meta = data.chart?.result?.[0]?.meta
+
+      if (meta && meta.regularMarketPrice) {
+        results.push({
+          symbol: cleanTicker,
+          shortName: meta.shortName || cleanTicker,
+          longName: meta.longName || cleanTicker,
+          currency: meta.currency || "BRL",
+          regularMarketPrice: meta.regularMarketPrice,
+          regularMarketDayHigh: meta.regularMarketDayHigh || 0,
+          regularMarketDayLow: meta.regularMarketDayLow || 0,
+          regularMarketChange: (meta.regularMarketPrice || 0) - (meta.previousClose || 0),
+          regularMarketChangePercent:
+            meta.previousClose > 0 ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100 : 0,
+          regularMarketTime: new Date((meta.regularMarketTime || Date.now() / 1000) * 1000).toISOString(),
+          regularMarketOpen: meta.regularMarketOpen || 0,
+          regularMarketVolume: meta.regularMarketVolume || 0,
+          regularMarketPreviousClose: meta.previousClose || 0,
+        })
+      }
+    } catch (err) {
+      console.error(`[v0] Yahoo fallback error for ${ticker}:`, err)
+    }
+  }
+
+  return results
 }
 
 export async function getCotacao(ticker: string): Promise<BrapiQuote | null> {
@@ -83,9 +133,11 @@ export async function getHistorico(
 ): Promise<BrapiHistoricalPrice[]> {
   try {
     const controller = new AbortController()
-    const timeoutId = setTimeout(() => controller.abort(), 5000)
+    const timeoutId = setTimeout(() => controller.abort(), 8000)
 
-    const response = await fetch(`${BRAPI_BASE_URL}/quote/${ticker}?range=${range}&interval=1d&fundamental=false`, {
+    const url = `${BRAPI_BASE_URL}/quote/${ticker}?range=${range}&interval=1d&token=${BRAPI_TOKEN}`
+
+    const response = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
     })
@@ -107,7 +159,9 @@ export async function searchAtivos(query: string): Promise<{ symbol: string; nam
     const controller = new AbortController()
     const timeoutId = setTimeout(() => controller.abort(), 5000)
 
-    const response = await fetch(`${BRAPI_BASE_URL}/available?search=${encodeURIComponent(query)}`, {
+    const url = `${BRAPI_BASE_URL}/available?search=${encodeURIComponent(query)}&token=${BRAPI_TOKEN}`
+
+    const response = await fetch(url, {
       signal: controller.signal,
       cache: "no-store",
     })
@@ -117,7 +171,8 @@ export async function searchAtivos(query: string): Promise<{ symbol: string; nam
     if (!response.ok) return []
 
     const data = await response.json()
-    return data.stocks?.slice(0, 20) || []
+    const stocks = data.stocks || []
+    return stocks.slice(0, 20).map((s: string) => ({ symbol: s, name: s }))
   } catch (error) {
     console.error("[v0] Error searching stocks:", error)
     return []

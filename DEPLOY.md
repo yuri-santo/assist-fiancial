@@ -89,42 +89,58 @@ scripts/008_create_notificacoes.sql
 
 ---
 
-## Passo 2: Deploy no Render (Gratuito)
+## Passo 2: Variaveis de Ambiente
 
-### 2.1 Preparar Repositorio
+### Arquivo `.env.local` (Desenvolvimento)
 
-1. Faca push do codigo para um repositorio GitHub
-2. Certifique-se que o `.gitignore` inclui `.env.local`
+Crie um arquivo `.env.local` na raiz do projeto com as seguintes variaveis:
 
-### 2.2 Criar Web Service no Render
-
-1. Acesse https://render.com e faca login
-2. Clique em **New** > **Web Service**
-3. Conecte seu repositorio GitHub
-4. Configure:
-   - **Name**: fincontrol (ou outro nome)
-   - **Region**: Oregon (ou mais proxima)
-   - **Branch**: main
-   - **Runtime**: Node
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-
-### 2.3 Configurar Variaveis de Ambiente
-
-No painel do Render, va em **Environment** e adicione:
-
-```
+```env
+# ========================================
+# SUPABASE (Obrigatório)
+# ========================================
 NEXT_PUBLIC_SUPABASE_URL=https://seu-projeto.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key
-SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key
+NEXT_PUBLIC_SUPABASE_ANON_KEY=sua_anon_key_aqui
+SUPABASE_SERVICE_ROLE_KEY=sua_service_role_key_aqui
+
+# Redirecionamento (deixe vazio em producao)
 NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=
+
+# ========================================
+# APIS DE COTACOES (Opcional mas recomendado)
+# ========================================
+
+# Brapi - API principal para cotacoes BR (https://brapi.dev)
+# Obtenha seu token gratuito em: https://brapi.dev/dashboard
+BRAPI_TOKEN=sUCSXQ4LUHgtgLpa5WmZ4H
+
+# Alpha Vantage - Fallback para cotacoes (https://www.alphavantage.co)
+# Obtenha sua key gratuita em: https://www.alphavantage.co/support/#api-key
+ALPHA_VANTAGE_API_KEY=demo
+
+# Finnhub - Fallback adicional (https://finnhub.io)
+# Obtenha sua key gratuita em: https://finnhub.io/register
+FINNHUB_API_KEY=
+
+# ========================================
+# APIS USADAS AUTOMATICAMENTE (Sem config necessaria)
+# ========================================
+# - Yahoo Finance: Usado como fallback principal (sem API key)
+# - HG Brasil: Usado como fallback secundario (demo key)
 ```
 
-### 2.4 Deploy
+### Variaveis de Ambiente na Vercel
 
-1. Clique em **Create Web Service**
-2. Aguarde o build e deploy (~5-10 minutos)
-3. Acesse a URL fornecida pelo Render
+No painel do projeto na Vercel, va em **Settings** > **Environment Variables** e adicione:
+
+| Nome da Variavel | Descricao | Obrigatorio |
+|-----------------|-----------|-------------|
+| `NEXT_PUBLIC_SUPABASE_URL` | URL do projeto Supabase | Sim |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Chave anonima do Supabase | Sim |
+| `SUPABASE_SERVICE_ROLE_KEY` | Chave de servico do Supabase | Sim |
+| `BRAPI_TOKEN` | Token da API Brapi para cotacoes | Recomendado |
+| `ALPHA_VANTAGE_API_KEY` | Key do Alpha Vantage (fallback) | Opcional |
+| `FINNHUB_API_KEY` | Key do Finnhub (fallback) | Opcional |
 
 ---
 
@@ -135,10 +151,7 @@ NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=
 1. Acesse https://vercel.com
 2. Clique em **Add New** > **Project**
 3. Importe o repositorio GitHub
-4. Em **Environment Variables**, adicione:
-   - `NEXT_PUBLIC_SUPABASE_URL`
-   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-   - `SUPABASE_SERVICE_ROLE_KEY`
+4. Em **Environment Variables**, adicione as variaveis listadas acima
 5. Clique em **Deploy**
 
 ### 3.2 Via CLI
@@ -157,6 +170,7 @@ vercel
 vercel env add NEXT_PUBLIC_SUPABASE_URL
 vercel env add NEXT_PUBLIC_SUPABASE_ANON_KEY
 vercel env add SUPABASE_SERVICE_ROLE_KEY
+vercel env add BRAPI_TOKEN
 
 # Redeploy com as variaveis
 vercel --prod
@@ -164,77 +178,59 @@ vercel --prod
 
 ---
 
-## Passo 4: Deploy na Hostinger
+## Passo 4: Deploy no Render (Gratuito)
 
-### 4.1 Build Local
+### 4.1 Preparar Repositorio
 
-```bash
-npm install
-npm run build
-```
+1. Faca push do codigo para um repositorio GitHub
+2. Certifique-se que o `.gitignore` inclui `.env.local`
 
-### 4.2 Upload via FTP/File Manager
+### 4.2 Criar Web Service no Render
 
-1. Acesse o painel da Hostinger
-2. Va em **File Manager** ou use FTP
-3. Faca upload de:
-   - Pasta `.next`
-   - Pasta `public`
-   - Pasta `node_modules` (ou rode `npm install` no servidor)
-   - Arquivo `package.json`
-   - Arquivo `next.config.mjs`
+1. Acesse https://render.com e faca login
+2. Clique em **New** > **Web Service**
+3. Conecte seu repositorio GitHub
+4. Configure:
+   - **Name**: fincontrol (ou outro nome)
+   - **Region**: Oregon (ou mais proxima)
+   - **Branch**: main
+   - **Runtime**: Node
+   - **Build Command**: `npm install && npm run build`
+   - **Start Command**: `npm start`
 
-### 4.3 Configurar Node.js
+### 4.3 Configurar Variaveis de Ambiente
 
-1. No painel, va em **Website** > **Advanced** > **Node.js**
-2. Habilite Node.js
-3. Configure o comando de inicio: `npm start`
-4. Adicione as variaveis de ambiente no painel
+No painel do Render, va em **Environment** e adicione as variaveis listadas na secao 2.
 
 ---
 
-## Configuracao para GitHub Actions (CI/CD)
+## Sistema de APIs de Cotacoes
 
-Crie o arquivo `.github/workflows/deploy.yml`:
+O sistema utiliza multiplas APIs com fallback automatico:
 
-```yaml
-name: Deploy
+### Ordem de Prioridade:
+1. **Yahoo Finance** (Principal - sem API key necessaria)
+2. **Brapi** (Com token - melhor para acoes BR)
+3. **HG Brasil** (Demo key incluida)
+4. **Alpha Vantage** (Fallback com API key)
+5. **Finnhub** (Fallback adicional)
 
-on:
-  push:
-    branches: [main]
+### Como funciona:
+- Se a primeira API falhar, o sistema automaticamente tenta a proxima
+- Logs no console indicam qual API foi usada: `[v0] Got quote from Yahoo Finance for PETR4`
+- Se todas falharem, o preco medio cadastrado e usado como fallback
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      - run: npm ci
-      - run: npm run build
-      - uses: amondnet/vercel-action@v25
-        with:
-          vercel-token: ${{ secrets.VERCEL_TOKEN }}
-          vercel-org-id: ${{ secrets.VERCEL_ORG_ID }}
-          vercel-project-id: ${{ secrets.VERCEL_PROJECT_ID }}
-          vercel-args: '--prod'
-```
+### Tokens e Keys:
 
----
+| API | Como obter | Limite gratuito |
+|-----|-----------|-----------------|
+| Brapi | https://brapi.dev/dashboard | 1000 req/dia |
+| Alpha Vantage | https://www.alphavantage.co/support/#api-key | 5 req/min |
+| Finnhub | https://finnhub.io/register | 60 req/min |
+| Yahoo Finance | Sem necessidade | Ilimitado* |
+| HG Brasil | Demo incluida | 5 req/min |
 
-## Exemplo de .env.local
-
-```env
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://abcdefghijk.supabase.co
-NEXT_PUBLIC_SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-SUPABASE_SERVICE_ROLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-
-# Redirecionamento (deixe vazio em producao)
-NEXT_PUBLIC_DEV_SUPABASE_REDIRECT_URL=
-```
+*Yahoo Finance pode ter rate limiting em uso intenso
 
 ---
 
@@ -250,7 +246,8 @@ Apos o deploy, verifique:
 - [ ] Animacoes funcionam corretamente
 - [ ] Dados sao salvos no banco
 - [ ] Graficos aparecem corretamente
-- [ ] Investimentos exibem cotacoes (API Brapi)
+- [ ] Investimentos exibem cotacoes (verificar logs: `[v0] Got quote from...`)
+- [ ] Modal de detalhes do ativo abre corretamente
 - [ ] Exportacao Excel/CSV funciona
 - [ ] Headers de seguranca estao ativos (verificar no DevTools > Network)
 
@@ -271,16 +268,19 @@ Apos o deploy, verifique:
 
 ### Erro 404 em /rest/v1/notificacoes
 - Execute o script `scripts/008_create_notificacoes.sql` no SQL Editor do Supabase
-- Este script cria a tabela de notificacoes que estava faltando
 
-### Modal nao aparece ou aparece cortado
-- Verifique se o z-index esta correto (z-50)
-- O modal foi configurado para aparecer no topo (top-[10%])
-- Se ainda houver problemas, limpe o cache do navegador
+### Erro 401 nas cotacoes (Brapi)
+- Verifique se o `BRAPI_TOKEN` esta configurado corretamente
+- O sistema usara Yahoo Finance como fallback automaticamente
 
-### Warnings de acessibilidade (form fields sem id)
-- Os componentes foram atualizados com useId() para gerar IDs unicos
-- Faca redeploy apos atualizar o codigo
+### Cotacoes nao carregam
+- Verifique os logs: `[v0] All APIs failed for ticker: XXXX`
+- Teste manualmente: `https://brapi.dev/api/quote/PETR4?token=SEU_TOKEN`
+- O Yahoo Finance deve funcionar como fallback
+
+### Modal de ativo nao aparece
+- Limpe o cache do navegador (Ctrl+Shift+R)
+- Verifique se o componente AssetDetailModal esta importado corretamente
 
 ---
 
@@ -292,9 +292,10 @@ Apos o deploy, verifique:
 | Render | Free | R$ 0 |
 | Vercel | Hobby | R$ 0 |
 | Brapi (Cotacoes) | Free | R$ 0 |
+| Yahoo Finance | Free | R$ 0 |
 | Hostinger | Premium | ~R$ 15/mes |
 
-**Total minimo: R$ 0/mes** (usando Supabase + Render/Vercel + Brapi)
+**Total minimo: R$ 0/mes** (usando Supabase + Render/Vercel + APIs gratuitas)
 
 ---
 
@@ -304,5 +305,6 @@ Apos o deploy, verifique:
 - [Documentacao Vercel](https://vercel.com/docs)
 - [Documentacao Render](https://render.com/docs)
 - [API Brapi (Cotacoes)](https://brapi.dev)
+- [Yahoo Finance API](https://query1.finance.yahoo.com)
+- [Alpha Vantage API](https://www.alphavantage.co/documentation/)
 - [Next.js Docs](https://nextjs.org/docs)
-- [CVE-2025-55182 Info](https://www.oligo.security/blog/critical-react-next-js-rce-vulnerability-cve-2025-55182-cve-2025-66478-what-you-need-to-know)

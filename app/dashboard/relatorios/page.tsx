@@ -2,7 +2,7 @@ import { createClient } from "@/lib/supabase/server"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { BarChart3, TrendingUp, TrendingDown, Wallet, PiggyBank, CreditCard, Target } from "lucide-react"
 import { formatCurrency } from "@/lib/utils/currency"
-import { formatMonthYear } from "@/lib/utils/date"
+import { formatMonthYear, getMonthName } from "@/lib/utils/date"
 import type { Despesa, Receita, Categoria, RendaVariavel, RendaFixa } from "@/lib/types"
 import { MonthlyChart } from "@/components/reports/monthly-chart"
 import { CategoryBreakdown } from "@/components/reports/category-breakdown"
@@ -14,11 +14,13 @@ import { GoalsProgress } from "@/components/reports/goals-progress"
 import { CashFlowChart } from "@/components/reports/cashflow-chart"
 import { getCotacoes } from "@/lib/api/brapi"
 import { ImportButton } from "@/components/reports/import-button"
+import { AnnualSummaryChart } from "@/components/reports/annual-summary-chart"
+import { MonthlyExpensesTable } from "@/components/reports/monthly-expenses-table"
 
 export default async function RelatoriosPage({
   searchParams,
 }: {
-  searchParams: Promise<{ mes?: string; ano?: string }>
+  searchParams: Promise<{ mes?: string; ano?: string; view?: string }>
 }) {
   const supabase = await createClient()
   const {
@@ -31,12 +33,16 @@ export default async function RelatoriosPage({
   const now = new Date()
   const mes = params.mes ? Number.parseInt(params.mes) : now.getMonth() + 1
   const ano = params.ano ? Number.parseInt(params.ano) : now.getFullYear()
+  const viewMode = (params.view as "mensal" | "anual") || "mensal"
 
   // Get date range for selected month
   const startDate = new Date(ano, mes - 1, 1)
   const endDate = new Date(ano, mes, 0)
   const start = startDate.toISOString().split("T")[0]
   const end = endDate.toISOString().split("T")[0]
+
+  const yearStart = new Date(ano, 0, 1).toISOString().split("T")[0]
+  const yearEnd = new Date(ano, 11, 31).toISOString().split("T")[0]
 
   // Get data for the last 6 months for the chart
   const sixMonthsAgo = new Date(ano, mes - 6, 1)
@@ -53,6 +59,8 @@ export default async function RelatoriosPage({
     rendaFixaRes,
     objetivosRes,
     caixinhasRes,
+    despesasAnoRes,
+    receitasAnoRes,
   ] = await Promise.all([
     supabase
       .from("despesas")
@@ -76,6 +84,8 @@ export default async function RelatoriosPage({
     supabase.from("renda_fixa").select("*").eq("user_id", user.id),
     supabase.from("objetivos").select("*").eq("user_id", user.id),
     supabase.from("caixinhas").select("*").eq("user_id", user.id),
+    supabase.from("despesas").select("*").eq("user_id", user.id).gte("data", yearStart).lte("data", yearEnd),
+    supabase.from("receitas").select("*").eq("user_id", user.id).gte("data", yearStart).lte("data", yearEnd),
   ])
 
   const despesas = (despesasRes.data || []) as Despesa[]
@@ -88,6 +98,8 @@ export default async function RelatoriosPage({
   const rendaFixa = (rendaFixaRes.data || []) as RendaFixa[]
   const objetivos = objetivosRes.data || []
   const caixinhas = caixinhasRes.data || []
+  const despesasAno = (despesasAnoRes.data || []) as Despesa[]
+  const receitasAno = (receitasAnoRes.data || []) as Receita[]
 
   // Buscar cotações
   const tickers = rendaVariavel.map((a) => a.ticker)
@@ -136,6 +148,32 @@ export default async function RelatoriosPage({
     })
   }
 
+  const annualData = []
+  let saldoAcumulado = 0
+  for (let m = 0; m < 12; m++) {
+    const monthDate = new Date(ano, m, 1)
+    const monthStart = monthDate.toISOString().split("T")[0]
+    const monthEnd = new Date(ano, m + 1, 0).toISOString().split("T")[0]
+
+    const monthDespesas = despesasAno
+      .filter((d) => d.data >= monthStart && d.data <= monthEnd)
+      .reduce((sum, d) => sum + d.valor, 0)
+
+    const monthReceitas = receitasAno
+      .filter((r) => r.data >= monthStart && r.data <= monthEnd)
+      .reduce((sum, r) => sum + r.valor, 0)
+
+    saldoAcumulado += monthReceitas - monthDespesas
+
+    annualData.push({
+      month: getMonthName(m + 1).slice(0, 3),
+      monthNum: m + 1,
+      despesas: monthDespesas,
+      receitas: monthReceitas,
+      saldo: saldoAcumulado,
+    })
+  }
+
   // Dados de saúde financeira
   const healthData = {
     economia,
@@ -145,152 +183,234 @@ export default async function RelatoriosPage({
     reserva: totalCaixinhas + totalObjetivos,
   }
 
+  const totalDespesasAno = despesasAno.reduce((sum, d) => sum + d.valor, 0)
+  const totalReceitasAno = receitasAno.reduce((sum, r) => sum + r.valor, 0)
+  const saldoAnual = totalReceitasAno - totalDespesasAno
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-2xl font-bold neon-text">Relatorios</h1>
-          <p className="text-muted-foreground">{formatMonthYear(startDate)}</p>
+          <p className="text-muted-foreground">{viewMode === "anual" ? `Ano ${ano}` : formatMonthYear(startDate)}</p>
         </div>
         <div className="flex flex-col gap-2 sm:flex-row">
-          <PeriodSelector mes={mes} ano={ano} />
+          <PeriodSelector mes={mes} ano={ano} viewMode={viewMode} />
           <ImportButton userId={user.id} />
           <ExportButton despesas={despesas} receitas={receitas} categorias={categorias} mes={mes} ano={ano} />
         </div>
       </div>
 
-      {/* Cards principais com animação */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="card-3d glass-card overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent group-hover:from-emerald-500/20 transition-all" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Receitas</CardTitle>
-            <TrendingUp className="h-5 w-5 text-emerald-400" />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className="text-2xl font-bold text-emerald-400">{formatCurrency(totalReceitas)}</div>
-            <p className="text-sm text-muted-foreground">{receitas.length} transacoes</p>
-          </CardContent>
-        </Card>
+      {viewMode === "anual" ? (
+        <>
+          {/* Annual Summary Cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent group-hover:from-emerald-500/20 transition-all" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Receitas Anuais</CardTitle>
+                <TrendingUp className="h-5 w-5 text-emerald-400" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold text-emerald-400">{formatCurrency(totalReceitasAno)}</div>
+                <p className="text-sm text-muted-foreground">{receitasAno.length} transacoes no ano</p>
+              </CardContent>
+            </Card>
 
-        <Card className="card-3d glass-card overflow-hidden group">
-          <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent group-hover:from-red-500/20 transition-all" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Despesas</CardTitle>
-            <TrendingDown className="h-5 w-5 text-red-400" />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className="text-2xl font-bold text-red-400">{formatCurrency(totalDespesas)}</div>
-            <p className="text-sm text-muted-foreground">{despesas.length} transacoes</p>
-          </CardContent>
-        </Card>
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent group-hover:from-red-500/20 transition-all" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Despesas Anuais</CardTitle>
+                <TrendingDown className="h-5 w-5 text-red-400" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold text-red-400">{formatCurrency(totalDespesasAno)}</div>
+                <p className="text-sm text-muted-foreground">{despesasAno.length} transacoes no ano</p>
+              </CardContent>
+            </Card>
 
-        <Card className="card-3d glass-card overflow-hidden group">
-          <div
-            className={`absolute inset-0 bg-gradient-to-br ${saldo >= 0 ? "from-cyan-500/10 group-hover:from-cyan-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
-          />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Saldo do Mes</CardTitle>
-            <BarChart3 className={`h-5 w-5 ${saldo >= 0 ? "text-cyan-400" : "text-amber-400"}`} />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className={`text-2xl font-bold ${saldo >= 0 ? "text-cyan-400" : "text-amber-400"}`}>
-              {saldo >= 0 ? "+" : ""}
-              {formatCurrency(saldo)}
-            </div>
-            <p className="text-sm text-muted-foreground">{saldo >= 0 ? "Saldo positivo" : "Saldo negativo"}</p>
-          </CardContent>
-        </Card>
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div
+                className={`absolute inset-0 bg-gradient-to-br ${saldoAnual >= 0 ? "from-cyan-500/10 group-hover:from-cyan-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+              />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Saldo Anual</CardTitle>
+                <BarChart3 className={`h-5 w-5 ${saldoAnual >= 0 ? "text-cyan-400" : "text-amber-400"}`} />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className={`text-2xl font-bold ${saldoAnual >= 0 ? "text-cyan-400" : "text-amber-400"}`}>
+                  {saldoAnual >= 0 ? "+" : ""}
+                  {formatCurrency(saldoAnual)}
+                </div>
+                <p className="text-sm text-muted-foreground">{saldoAnual >= 0 ? "Ano positivo" : "Ano negativo"}</p>
+              </CardContent>
+            </Card>
 
-        <Card className="card-3d glass-card overflow-hidden group">
-          <div
-            className={`absolute inset-0 bg-gradient-to-br ${economia >= 20 ? "from-emerald-500/10 group-hover:from-emerald-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
-          />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Economia</CardTitle>
-            <PiggyBank className={`h-5 w-5 ${economia >= 20 ? "text-emerald-400" : "text-amber-400"}`} />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className={`text-2xl font-bold ${economia >= 20 ? "text-emerald-400" : "text-amber-400"}`}>
-              {economia.toFixed(1)}%
-            </div>
-            <p className="text-sm text-muted-foreground">{economia >= 20 ? "Otimo!" : "Meta: 20%"}</p>
-          </CardContent>
-        </Card>
-      </div>
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div
+                className={`absolute inset-0 bg-gradient-to-br ${totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "from-emerald-500/10 group-hover:from-emerald-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+              />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Economia Anual</CardTitle>
+                <PiggyBank
+                  className={`h-5 w-5 ${totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "text-emerald-400" : "text-amber-400"}`}
+                />
+              </CardHeader>
+              <CardContent className="relative">
+                <div
+                  className={`text-2xl font-bold ${totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "text-emerald-400" : "text-amber-400"}`}
+                >
+                  {totalReceitasAno > 0 ? ((saldoAnual / totalReceitasAno) * 100).toFixed(1) : 0}%
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  {totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "Otimo!" : "Meta: 20%"}
+                </p>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Patrimônio */}
-      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="card-3d glass-card overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Patrimonio Total</CardTitle>
-            <Wallet className="h-5 w-5 text-primary" />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className="text-2xl font-bold neon-text">{formatCurrency(patrimonioTotal)}</div>
-            <p className="text-sm text-muted-foreground">Investimentos + Reservas</p>
-          </CardContent>
-        </Card>
+          {/* Annual Charts */}
+          <AnnualSummaryChart data={annualData} ano={ano} />
 
-        <Card className="card-3d glass-card overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Investimentos</CardTitle>
-            <TrendingUp className="h-5 w-5 text-blue-400" />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className="text-2xl font-bold">{formatCurrency(totalRendaVariavel + totalRendaFixa)}</div>
-            <p className="text-sm text-muted-foreground">RV + RF</p>
-          </CardContent>
-        </Card>
+          {/* Monthly breakdown table */}
+          <MonthlyExpensesTable data={annualData} ano={ano} />
+        </>
+      ) : (
+        <>
+          {/* Monthly view - existing cards */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent group-hover:from-emerald-500/20 transition-all" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Receitas</CardTitle>
+                <TrendingUp className="h-5 w-5 text-emerald-400" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold text-emerald-400">{formatCurrency(totalReceitas)}</div>
+                <p className="text-sm text-muted-foreground">{receitas.length} transacoes</p>
+              </CardContent>
+            </Card>
 
-        <Card className="card-3d glass-card overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Limite Cartoes</CardTitle>
-            <CreditCard className="h-5 w-5 text-purple-400" />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className="text-2xl font-bold">{formatCurrency(totalLimiteCartoes)}</div>
-            <p className="text-sm text-muted-foreground">{cartoes.length} cartoes</p>
-          </CardContent>
-        </Card>
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent group-hover:from-red-500/20 transition-all" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Despesas</CardTitle>
+                <TrendingDown className="h-5 w-5 text-red-400" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold text-red-400">{formatCurrency(totalDespesas)}</div>
+                <p className="text-sm text-muted-foreground">{despesas.length} transacoes</p>
+              </CardContent>
+            </Card>
 
-        <Card className="card-3d glass-card overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">Objetivos</CardTitle>
-            <Target className="h-5 w-5 text-amber-400" />
-          </CardHeader>
-          <CardContent className="relative">
-            <div className="text-2xl font-bold">{formatCurrency(totalObjetivos)}</div>
-            <p className="text-sm text-muted-foreground">{objetivos.length} objetivos</p>
-          </CardContent>
-        </Card>
-      </div>
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div
+                className={`absolute inset-0 bg-gradient-to-br ${saldo >= 0 ? "from-cyan-500/10 group-hover:from-cyan-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+              />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Saldo do Mes</CardTitle>
+                <BarChart3 className={`h-5 w-5 ${saldo >= 0 ? "text-cyan-400" : "text-amber-400"}`} />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className={`text-2xl font-bold ${saldo >= 0 ? "text-cyan-400" : "text-amber-400"}`}>
+                  {saldo >= 0 ? "+" : ""}
+                  {formatCurrency(saldo)}
+                </div>
+                <p className="text-sm text-muted-foreground">{saldo >= 0 ? "Saldo positivo" : "Saldo negativo"}</p>
+              </CardContent>
+            </Card>
 
-      {/* Gráficos principais */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <MonthlyChart data={monthlyData} />
-        <CategoryBreakdown despesas={despesas} categorias={categorias} />
-      </div>
+            <Card className="card-3d glass-card overflow-hidden group">
+              <div
+                className={`absolute inset-0 bg-gradient-to-br ${economia >= 20 ? "from-emerald-500/10 group-hover:from-emerald-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+              />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Economia</CardTitle>
+                <PiggyBank className={`h-5 w-5 ${economia >= 20 ? "text-emerald-400" : "text-amber-400"}`} />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className={`text-2xl font-bold ${economia >= 20 ? "text-emerald-400" : "text-amber-400"}`}>
+                  {economia.toFixed(1)}%
+                </div>
+                <p className="text-sm text-muted-foreground">{economia >= 20 ? "Otimo!" : "Meta: 20%"}</p>
+              </CardContent>
+            </Card>
+          </div>
 
-      {/* Gráficos adicionais */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <FinancialHealthChart data={healthData} totalReceitas={totalReceitas} />
-        <CashFlowChart monthlyData={monthlyData} />
-      </div>
+          {/* Patrimônio */}
+          <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <Card className="card-3d glass-card overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Patrimonio Total</CardTitle>
+                <Wallet className="h-5 w-5 text-primary" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold neon-text">{formatCurrency(patrimonioTotal)}</div>
+                <p className="text-sm text-muted-foreground">Investimentos + Reservas</p>
+              </CardContent>
+            </Card>
 
-      {/* Resumo de investimentos e objetivos */}
-      <div className="grid gap-6 lg:grid-cols-2">
-        <InvestmentsOverview
-          rendaVariavel={totalRendaVariavel}
-          rendaFixa={totalRendaFixa}
-          total={totalRendaVariavel + totalRendaFixa}
-        />
-        <GoalsProgress objetivos={objetivos} />
-      </div>
+            <Card className="card-3d glass-card overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Investimentos</CardTitle>
+                <TrendingUp className="h-5 w-5 text-blue-400" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold">{formatCurrency(totalRendaVariavel + totalRendaFixa)}</div>
+                <p className="text-sm text-muted-foreground">RV + RF</p>
+              </CardContent>
+            </Card>
+
+            <Card className="card-3d glass-card overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Limite Cartoes</CardTitle>
+                <CreditCard className="h-5 w-5 text-purple-400" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold">{formatCurrency(totalLimiteCartoes)}</div>
+                <p className="text-sm text-muted-foreground">{cartoes.length} cartoes</p>
+              </CardContent>
+            </Card>
+
+            <Card className="card-3d glass-card overflow-hidden">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />
+              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+                <CardTitle className="text-sm font-medium text-muted-foreground">Objetivos</CardTitle>
+                <Target className="h-5 w-5 text-amber-400" />
+              </CardHeader>
+              <CardContent className="relative">
+                <div className="text-2xl font-bold">{formatCurrency(totalObjetivos)}</div>
+                <p className="text-sm text-muted-foreground">{objetivos.length} objetivos</p>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Gráficos principais */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <MonthlyChart data={monthlyData} />
+            <CategoryBreakdown despesas={despesas} categorias={categorias} />
+          </div>
+
+          {/* Gráficos adicionais */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <FinancialHealthChart data={healthData} totalReceitas={totalReceitas} />
+            <CashFlowChart monthlyData={monthlyData} />
+          </div>
+
+          {/* Resumo de investimentos e objetivos */}
+          <div className="grid gap-6 lg:grid-cols-2">
+            <InvestmentsOverview
+              rendaVariavel={totalRendaVariavel}
+              rendaFixa={totalRendaFixa}
+              total={totalRendaVariavel + totalRendaFixa}
+            />
+            <GoalsProgress objetivos={objetivos} />
+          </div>
+        </>
+      )}
     </div>
   )
 }
