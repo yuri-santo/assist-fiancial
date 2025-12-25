@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { Bell, Check, AlertTriangle, Lightbulb, Trophy, Clock, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import {
@@ -39,53 +39,78 @@ const tipoColors = {
 export function NotificationCenter({ userId }: NotificationCenterProps) {
   const [notificacoes, setNotificacoes] = useState<Notificacao[]>([])
   const [open, setOpen] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
+  const [tableExists, setTableExists] = useState(true)
   const router = useRouter()
   const supabase = createClient()
 
-  useEffect(() => {
-    const fetchNotificacoes = async () => {
-      const { data } = await supabase
+  const fetchNotificacoes = useCallback(async () => {
+    try {
+      const { data, error } = await supabase
         .from("notificacoes")
         .select("*")
         .eq("user_id", userId)
         .order("created_at", { ascending: false })
         .limit(20)
 
-      if (data) setNotificacoes(data)
-    }
+      if (error) {
+        // Se a tabela nao existe, nao mostrar erro
+        if (error.code === "42P01" || error.message.includes("does not exist")) {
+          setTableExists(false)
+          setNotificacoes([])
+        }
+        return
+      }
 
-    fetchNotificacoes()
-
-    // Realtime subscription
-    const channel = supabase
-      .channel("notificacoes")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "notificacoes", filter: `user_id=eq.${userId}` },
-        () => {
-          fetchNotificacoes()
-        },
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
+      if (data) {
+        setNotificacoes(data)
+        setTableExists(true)
+      }
+    } catch {
+      setTableExists(false)
+    } finally {
+      setIsLoading(false)
     }
   }, [userId, supabase])
+
+  useEffect(() => {
+    fetchNotificacoes()
+
+    // Realtime subscription apenas se a tabela existir
+    if (tableExists) {
+      const channel = supabase
+        .channel("notificacoes")
+        .on(
+          "postgres_changes",
+          { event: "*", schema: "public", table: "notificacoes", filter: `user_id=eq.${userId}` },
+          () => {
+            fetchNotificacoes()
+          },
+        )
+        .subscribe()
+
+      return () => {
+        supabase.removeChannel(channel)
+      }
+    }
+  }, [userId, supabase, tableExists, fetchNotificacoes])
 
   const naoLidas = notificacoes.filter((n) => !n.lida).length
 
   const marcarComoLida = async (id: string) => {
+    if (!tableExists) return
     await supabase.from("notificacoes").update({ lida: true }).eq("id", id)
     setNotificacoes((prev) => prev.map((n) => (n.id === id ? { ...n, lida: true } : n)))
   }
 
   const marcarTodasComoLidas = async () => {
+    if (!tableExists) return
     await supabase.from("notificacoes").update({ lida: true }).eq("user_id", userId)
     setNotificacoes((prev) => prev.map((n) => ({ ...n, lida: true })))
   }
 
   const excluirNotificacao = async (id: string) => {
+    if (!tableExists) return
     await supabase.from("notificacoes").delete().eq("id", id)
     setNotificacoes((prev) => prev.filter((n) => n.id !== id))
   }
@@ -105,6 +130,7 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
           variant="ghost"
           size="icon"
           className="relative hover:bg-primary/10 hover:text-primary transition-colors"
+          aria-label="Notificacoes"
         >
           <Bell className="h-5 w-5" />
           {naoLidas > 0 && (
@@ -125,7 +151,17 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
           )}
         </div>
         <ScrollArea className="max-h-96">
-          {notificacoes.length === 0 ? (
+          {isLoading ? (
+            <div className="p-8 text-center text-muted-foreground">
+              <Bell className="mx-auto h-8 w-8 mb-2 opacity-50 animate-pulse" />
+              <p>Carregando...</p>
+            </div>
+          ) : !tableExists ? (
+            <div className="p-8 text-center text-muted-foreground">
+              <Bell className="mx-auto h-8 w-8 mb-2 opacity-50" />
+              <p className="text-sm">Execute o script 008_create_notificacoes.sql no Supabase</p>
+            </div>
+          ) : notificacoes.length === 0 ? (
             <div className="p-8 text-center text-muted-foreground">
               <Bell className="mx-auto h-8 w-8 mb-2 opacity-50" />
               <p>Nenhuma notificacao</p>
@@ -137,7 +173,7 @@ export function NotificationCenter({ userId }: NotificationCenterProps) {
                 <div
                   key={notificacao.id}
                   className={cn(
-                    "flex gap-3 p-3 border-b border-border/30 hover:bg-primary/5 cursor-pointer transition-colors",
+                    "flex gap-3 p-3 border-b border-border/30 hover:bg-primary/5 cursor-pointer transition-colors group",
                     !notificacao.lida && "bg-primary/10",
                   )}
                   onClick={() => handleClick(notificacao)}

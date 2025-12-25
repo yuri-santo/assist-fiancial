@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useTransition, useEffect } from "react"
+import { useState, useTransition, useEffect, useId } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -24,6 +24,7 @@ const CDI_ATUAL = 10.65
 const IPCA_ATUAL = 4.5
 
 export function AddRendaFixaDialog() {
+  const formId = useId()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [valorProjetado, setValorProjetado] = useState<number | null>(null)
@@ -171,21 +172,26 @@ export function AddRendaFixaDialog() {
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="nome">Nome da Aplicacao *</Label>
+              <Label htmlFor={`${formId}-nome`}>Nome da Aplicacao *</Label>
               <Input
-                id="nome"
+                id={`${formId}-nome`}
+                name="nome"
                 placeholder="Ex: CDB Banco Inter 110% CDI"
                 value={formData.nome}
                 onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
                 className="border-primary/20 bg-background/50"
                 required
+                autoComplete="off"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tipo">Tipo *</Label>
-              <Select value={formData.tipo} onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as any }))}>
-                <SelectTrigger className="border-primary/20 bg-background/50">
+              <Label htmlFor={`${formId}-tipo`}>Tipo *</Label>
+              <Select
+                value={formData.tipo}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as keyof typeof TIPOS_RENDA_FIXA }))}
+              >
+                <SelectTrigger id={`${formId}-tipo`} className="border-primary/20 bg-background/50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
@@ -199,21 +205,24 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="instituicao">Instituicao *</Label>
+              <Label htmlFor={`${formId}-instituicao`}>Instituicao *</Label>
               <Input
-                id="instituicao"
+                id={`${formId}-instituicao`}
+                name="instituicao"
                 placeholder="Ex: Banco Inter, XP, BTG..."
                 value={formData.instituicao}
                 onChange={(e) => setFormData((prev) => ({ ...prev, instituicao: e.target.value }))}
                 className="border-primary/20 bg-background/50"
                 required
+                autoComplete="off"
               />
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="valor_investido">Valor Investido (R$) *</Label>
+              <Label htmlFor={`${formId}-valor_investido`}>Valor Investido (R$) *</Label>
               <Input
-                id="valor_investido"
+                id={`${formId}-valor_investido`}
+                name="valor_investido"
                 type="number"
                 step="0.01"
                 placeholder="0,00"
@@ -225,9 +234,10 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="valor_atual">Valor Atual (R$)</Label>
+              <Label htmlFor={`${formId}-valor_atual`}>Valor Atual (R$)</Label>
               <Input
-                id="valor_atual"
+                id={`${formId}-valor_atual`}
+                name="valor_atual"
                 type="number"
                 step="0.01"
                 placeholder="Igual ao investido se vazio"
@@ -238,12 +248,12 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="indexador">Indexador *</Label>
+              <Label htmlFor={`${formId}-indexador`}>Indexador *</Label>
               <Select
                 value={formData.indexador}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as any }))}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as keyof typeof INDEXADORES }))}
               >
-                <SelectTrigger className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-indexador`} className="border-primary/20 bg-background/50">
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
@@ -257,9 +267,10 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="taxa">{getTaxaLabel()}</Label>
+              <Label htmlFor={`${formId}-taxa`}>{getTaxaLabel()}</Label>
               <Input
-                id="taxa"
+                id={`${formId}-taxa`}
+                name="taxa"
                 type="number"
                 step="0.01"
                 placeholder={getTaxaPlaceholder()}
@@ -277,9 +288,10 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="data_aplicacao">Data Aplicacao *</Label>
+              <Label htmlFor={`${formId}-data_aplicacao`}>Data Aplicacao *</Label>
               <Input
-                id="data_aplicacao"
+                id={`${formId}-data_aplicacao`}
+                name="data_aplicacao"
                 type="date"
                 value={formData.data_aplicacao}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_aplicacao: e.target.value }))}
@@ -289,9 +301,10 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="data_vencimento">Data Vencimento</Label>
+              <Label htmlFor={`${formId}-data_vencimento`}>Data Vencimento</Label>
               <Input
-                id="data_vencimento"
+                id={`${formId}-data_vencimento`}
+                name="data_vencimento"
                 type="date"
                 value={formData.data_vencimento}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_vencimento: e.target.value }))}
@@ -300,12 +313,14 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="liquidez">Liquidez</Label>
+              <Label htmlFor={`${formId}-liquidez`}>Liquidez</Label>
               <Select
                 value={formData.liquidez}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, liquidez: v as any }))}
+                onValueChange={(v) =>
+                  setFormData((prev) => ({ ...prev, liquidez: v as "diaria" | "vencimento" | "carencia" }))
+                }
               >
-                <SelectTrigger className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-liquidez`} className="border-primary/20 bg-background/50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
@@ -318,9 +333,10 @@ export function AddRendaFixaDialog() {
 
             {formData.liquidez === "carencia" && (
               <div className="space-y-2">
-                <Label htmlFor="dias_carencia">Dias de Carencia</Label>
+                <Label htmlFor={`${formId}-dias_carencia`}>Dias de Carencia</Label>
                 <Input
-                  id="dias_carencia"
+                  id={`${formId}-dias_carencia`}
+                  name="dias_carencia"
                   type="number"
                   placeholder="Ex: 90"
                   value={formData.dias_carencia}

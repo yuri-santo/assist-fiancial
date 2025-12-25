@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { useState, useTransition, useEffect, useCallback } from "react"
+import { useState, useTransition, useEffect, useCallback, useId } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -21,6 +21,7 @@ import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, MERCADOS, searchAtivos, getCotac
 import { formatCurrency } from "@/lib/utils/currency"
 
 export function AddRendaVariavelDialog() {
+  const formId = useId()
   const [open, setOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const [searchQuery, setSearchQuery] = useState("")
@@ -170,13 +171,16 @@ export function AddRendaVariavelDialog() {
           )}
 
           <div className="space-y-2">
-            <Label>Buscar Ativo</Label>
+            <Label htmlFor={`${formId}-search`}>Buscar Ativo</Label>
             <div className="relative">
               <Input
+                id={`${formId}-search`}
+                name="search"
                 placeholder="Digite o ticker ou nome (ex: PETR4, Petrobras)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="border-primary/20 bg-background/50 pr-10"
+                autoComplete="off"
               />
               {isSearching ? (
                 <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 animate-spin text-muted-foreground" />
@@ -205,10 +209,11 @@ export function AddRendaVariavelDialog() {
 
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="ticker">Ticker *</Label>
+              <Label htmlFor={`${formId}-ticker`}>Ticker *</Label>
               <div className="flex gap-2">
                 <Input
-                  id="ticker"
+                  id={`${formId}-ticker`}
+                  name="ticker"
                   placeholder="Ex: PETR4"
                   value={formData.ticker}
                   onChange={(e) => {
@@ -218,6 +223,7 @@ export function AddRendaVariavelDialog() {
                   }}
                   className="border-primary/20 bg-background/50"
                   required
+                  autoComplete="off"
                 />
                 <Button
                   type="button"
@@ -226,6 +232,7 @@ export function AddRendaVariavelDialog() {
                   onClick={() => fetchCotacao(formData.ticker)}
                   disabled={!formData.ticker || isLoadingCotacao}
                   className="shrink-0"
+                  aria-label="Buscar cotacao"
                 >
                   {isLoadingCotacao ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
                 </Button>
@@ -247,9 +254,14 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="tipo">Tipo de Ativo *</Label>
-              <Select value={formData.tipo} onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as any }))}>
-                <SelectTrigger className="border-primary/20 bg-background/50">
+              <Label htmlFor={`${formId}-tipo`}>Tipo de Ativo *</Label>
+              <Select
+                value={formData.tipo}
+                onValueChange={(v) =>
+                  setFormData((prev) => ({ ...prev, tipo: v as keyof typeof TIPOS_RENDA_VARIAVEL }))
+                }
+              >
+                <SelectTrigger id={`${formId}-tipo`} className="border-primary/20 bg-background/50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
@@ -263,12 +275,12 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="moeda">Moeda *</Label>
+              <Label htmlFor={`${formId}-moeda`}>Moeda *</Label>
               <Select
                 value={formData.moeda}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, moeda: v as any }))}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, moeda: v as keyof typeof MOEDAS }))}
               >
-                <SelectTrigger className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-moeda`} className="border-primary/20 bg-background/50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
@@ -282,12 +294,12 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="mercado">Mercado *</Label>
+              <Label htmlFor={`${formId}-mercado`}>Mercado *</Label>
               <Select
                 value={formData.mercado}
-                onValueChange={(v) => setFormData((prev) => ({ ...prev, mercado: v as any }))}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, mercado: v as keyof typeof MERCADOS }))}
               >
-                <SelectTrigger className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-mercado`} className="border-primary/20 bg-background/50">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
@@ -301,9 +313,10 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="quantidade">Quantidade *</Label>
+              <Label htmlFor={`${formId}-quantidade`}>Quantidade *</Label>
               <Input
-                id="quantidade"
+                id={`${formId}-quantidade`}
+                name="quantidade"
                 type="number"
                 step="0.0001"
                 placeholder="0"
@@ -315,9 +328,10 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="preco_medio">Preco Medio *</Label>
+              <Label htmlFor={`${formId}-preco_medio`}>Preco Medio *</Label>
               <Input
-                id="preco_medio"
+                id={`${formId}-preco_medio`}
+                name="preco_medio"
                 type="number"
                 step="0.01"
                 placeholder="Digite ou busque cotacao"
@@ -329,9 +343,10 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="data_compra">Data da Compra *</Label>
+              <Label htmlFor={`${formId}-data_compra`}>Data da Compra *</Label>
               <Input
-                id="data_compra"
+                id={`${formId}-data_compra`}
+                name="data_compra"
                 type="date"
                 value={formData.data_compra}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_compra: e.target.value }))}
@@ -341,9 +356,10 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="corretora">Corretora</Label>
+              <Label htmlFor={`${formId}-corretora`}>Corretora</Label>
               <Input
-                id="corretora"
+                id={`${formId}-corretora`}
+                name="corretora"
                 placeholder="Ex: XP, Clear, Rico..."
                 value={formData.corretora}
                 onChange={(e) => setFormData((prev) => ({ ...prev, corretora: e.target.value }))}
@@ -352,9 +368,9 @@ export function AddRendaVariavelDialog() {
             </div>
 
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor="setor">Setor</Label>
+              <Label htmlFor={`${formId}-setor`}>Setor</Label>
               <Select value={formData.setor} onValueChange={(v) => setFormData((prev) => ({ ...prev, setor: v }))}>
-                <SelectTrigger className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-setor`} className="border-primary/20 bg-background/50">
                   <SelectValue placeholder="Selecione o setor" />
                 </SelectTrigger>
                 <SelectContent className="glass-card border-primary/20">
