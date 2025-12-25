@@ -158,14 +158,14 @@ export function AddRendaVariavelDialog() {
           Adicionar Ativo
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-card border-primary/20 sm:max-w-lg">
+      <DialogContent className="border-primary/20 bg-background">
         <DialogHeader>
-          <DialogTitle className="neon-text">Adicionar Ativo de Renda Variavel</DialogTitle>
+          <DialogTitle className="text-primary">Adicionar Ativo de Renda Variavel</DialogTitle>
           <DialogDescription>Preencha os dados do ativo para adicionar a sua carteira</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {apiError && (
-            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400 text-sm">
+            <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-sm">
               {apiError}
             </div>
           )}
@@ -179,7 +179,7 @@ export function AddRendaVariavelDialog() {
                 placeholder="Digite o ticker ou nome (ex: PETR4, Petrobras)..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="border-primary/20 bg-background/50 pr-10"
+                className="border-primary/20 bg-background pr-10"
                 autoComplete="off"
               />
               {isSearching ? (
@@ -189,7 +189,7 @@ export function AddRendaVariavelDialog() {
               )}
             </div>
             {searchResults.length > 0 && (
-              <div className="glass-card rounded-lg border border-primary/20 max-h-32 overflow-y-auto">
+              <div className="rounded-lg border border-primary/20 max-h-32 overflow-y-auto bg-background">
                 {searchResults.map((result) => (
                   <button
                     key={result.symbol}
@@ -221,7 +221,7 @@ export function AddRendaVariavelDialog() {
                     setCotacaoAtual(null)
                     setVariacao(null)
                   }}
-                  className="border-primary/20 bg-background/50"
+                  className="border-primary/20 bg-background"
                   required
                   autoComplete="off"
                 />
@@ -238,13 +238,13 @@ export function AddRendaVariavelDialog() {
                 </Button>
               </div>
               {cotacaoAtual !== null && (
-                <div className="flex items-center justify-between p-2 rounded-lg bg-background/50 border border-primary/20 text-sm">
+                <div className="flex items-center justify-between p-2 rounded-lg bg-muted border border-primary/20 text-sm">
                   <div>
                     <p className="text-xs text-muted-foreground">Cotacao</p>
                     <p className="font-bold text-primary">{formatCurrency(cotacaoAtual)}</p>
                   </div>
                   {variacao !== null && (
-                    <div className={`flex items-center gap-1 ${variacao >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                    <div className={`flex items-center gap-1 ${variacao >= 0 ? "text-emerald-500" : "text-red-500"}`}>
                       {variacao >= 0 ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
                       <span className="text-xs font-medium">{variacao.toFixed(2)}%</span>
                     </div>
@@ -261,10 +261,10 @@ export function AddRendaVariavelDialog() {
                   setFormData((prev) => ({ ...prev, tipo: v as keyof typeof TIPOS_RENDA_VARIAVEL }))
                 }
               >
-                <SelectTrigger id={`${formId}-tipo`} className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-tipo`} name="tipo" className="border-primary/20 bg-background">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="glass-card border-primary/20">
+                <SelectContent className="border-primary/20">
                   {Object.entries(TIPOS_RENDA_VARIAVEL).map(([key, { label }]) => (
                     <SelectItem key={key} value={key}>
                       {label}
@@ -280,10 +280,10 @@ export function AddRendaVariavelDialog() {
                 value={formData.moeda}
                 onValueChange={(v) => setFormData((prev) => ({ ...prev, moeda: v as keyof typeof MOEDAS }))}
               >
-                <SelectTrigger id={`${formId}-moeda`} className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-moeda`} name="moeda" className="border-primary/20 bg-background">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="glass-card border-primary/20">
+                <SelectContent className="border-primary/20">
                   {Object.entries(MOEDAS).map(([key, { label }]) => (
                     <SelectItem key={key} value={key}>
                       {label}
@@ -299,10 +299,10 @@ export function AddRendaVariavelDialog() {
                 value={formData.mercado}
                 onValueChange={(v) => setFormData((prev) => ({ ...prev, mercado: v as keyof typeof MERCADOS }))}
               >
-                <SelectTrigger id={`${formId}-mercado`} className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-mercado`} name="mercado" className="border-primary/20 bg-background">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="glass-card border-primary/20">
+                <SelectContent className="border-primary/20">
                   {Object.entries(MERCADOS).map(([key, { label }]) => (
                     <SelectItem key={key} value={key}>
                       {label}
@@ -322,7 +322,7 @@ export function AddRendaVariavelDialog() {
                 placeholder="0"
                 value={formData.quantidade}
                 onChange={(e) => setFormData((prev) => ({ ...prev, quantidade: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
               />
             </div>
@@ -337,7 +337,7 @@ export function AddRendaVariavelDialog() {
                 placeholder="Digite ou busque cotacao"
                 value={formData.preco_medio}
                 onChange={(e) => setFormData((prev) => ({ ...prev, preco_medio: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
               />
             </div>
@@ -350,7 +350,7 @@ export function AddRendaVariavelDialog() {
                 type="date"
                 value={formData.data_compra}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_compra: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
               />
             </div>
@@ -363,17 +363,17 @@ export function AddRendaVariavelDialog() {
                 placeholder="Ex: XP, Clear, Rico..."
                 value={formData.corretora}
                 onChange={(e) => setFormData((prev) => ({ ...prev, corretora: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
               />
             </div>
 
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor={`${formId}-setor`}>Setor</Label>
               <Select value={formData.setor} onValueChange={(v) => setFormData((prev) => ({ ...prev, setor: v }))}>
-                <SelectTrigger id={`${formId}-setor`} className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-setor`} name="setor" className="border-primary/20 bg-background">
                   <SelectValue placeholder="Selecione o setor" />
                 </SelectTrigger>
-                <SelectContent className="glass-card border-primary/20">
+                <SelectContent className="border-primary/20">
                   {SETORES.map((setor) => (
                     <SelectItem key={setor} value={setor}>
                       {setor}
@@ -384,7 +384,7 @@ export function AddRendaVariavelDialog() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full neon-glow" disabled={isPending}>
+          <Button type="submit" className="w-full" disabled={isPending}>
             {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
             Adicionar Ativo
           </Button>

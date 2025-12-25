@@ -164,9 +164,9 @@ export function AddRendaFixaDialog() {
           Adicionar Aplicacao
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-card border-primary/20 sm:max-w-lg">
+      <DialogContent className="border-primary/20 bg-background">
         <DialogHeader>
-          <DialogTitle className="neon-text">Adicionar Aplicacao de Renda Fixa</DialogTitle>
+          <DialogTitle className="text-primary">Adicionar Aplicacao de Renda Fixa</DialogTitle>
           <DialogDescription>Preencha os dados da aplicacao incluindo a taxa de juros</DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -179,7 +179,7 @@ export function AddRendaFixaDialog() {
                 placeholder="Ex: CDB Banco Inter 110% CDI"
                 value={formData.nome}
                 onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
                 autoComplete="off"
               />
@@ -191,10 +191,10 @@ export function AddRendaFixaDialog() {
                 value={formData.tipo}
                 onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as keyof typeof TIPOS_RENDA_FIXA }))}
               >
-                <SelectTrigger id={`${formId}-tipo`} className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-tipo`} name="tipo" className="border-primary/20 bg-background">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="glass-card border-primary/20">
+                <SelectContent className="border-primary/20">
                   {Object.entries(TIPOS_RENDA_FIXA).map(([key, { label }]) => (
                     <SelectItem key={key} value={key}>
                       {label}
@@ -212,7 +212,7 @@ export function AddRendaFixaDialog() {
                 placeholder="Ex: Banco Inter, XP, BTG..."
                 value={formData.instituicao}
                 onChange={(e) => setFormData((prev) => ({ ...prev, instituicao: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
                 autoComplete="off"
               />
@@ -228,7 +228,7 @@ export function AddRendaFixaDialog() {
                 placeholder="0,00"
                 value={formData.valor_investido}
                 onChange={(e) => setFormData((prev) => ({ ...prev, valor_investido: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
               />
             </div>
@@ -243,7 +243,7 @@ export function AddRendaFixaDialog() {
                 placeholder="Igual ao investido se vazio"
                 value={formData.valor_atual}
                 onChange={(e) => setFormData((prev) => ({ ...prev, valor_atual: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
               />
             </div>
 
@@ -253,10 +253,10 @@ export function AddRendaFixaDialog() {
                 value={formData.indexador}
                 onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as keyof typeof INDEXADORES }))}
               >
-                <SelectTrigger id={`${formId}-indexador`} className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-indexador`} name="indexador" className="border-primary/20 bg-background">
                   <SelectValue placeholder="Selecione" />
                 </SelectTrigger>
-                <SelectContent className="glass-card border-primary/20">
+                <SelectContent className="border-primary/20">
                   {Object.entries(INDEXADORES).map(([key, { label }]) => (
                     <SelectItem key={key} value={key}>
                       {label}
@@ -276,7 +276,7 @@ export function AddRendaFixaDialog() {
                 placeholder={getTaxaPlaceholder()}
                 value={formData.taxa}
                 onChange={(e) => setFormData((prev) => ({ ...prev, taxa: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
               />
               <p className="text-xs text-muted-foreground">
@@ -295,7 +295,7 @@ export function AddRendaFixaDialog() {
                 type="date"
                 value={formData.data_aplicacao}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_aplicacao: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
                 required
               />
             </div>
@@ -308,7 +308,7 @@ export function AddRendaFixaDialog() {
                 type="date"
                 value={formData.data_vencimento}
                 onChange={(e) => setFormData((prev) => ({ ...prev, data_vencimento: e.target.value }))}
-                className="border-primary/20 bg-background/50"
+                className="border-primary/20 bg-background"
               />
             </div>
 
@@ -320,10 +320,10 @@ export function AddRendaFixaDialog() {
                   setFormData((prev) => ({ ...prev, liquidez: v as "diaria" | "vencimento" | "carencia" }))
                 }
               >
-                <SelectTrigger id={`${formId}-liquidez`} className="border-primary/20 bg-background/50">
+                <SelectTrigger id={`${formId}-liquidez`} name="liquidez" className="border-primary/20 bg-background">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="glass-card border-primary/20">
+                <SelectContent className="border-primary/20">
                   <SelectItem value="diaria">Diaria</SelectItem>
                   <SelectItem value="vencimento">No Vencimento</SelectItem>
                   <SelectItem value="carencia">Com Carencia</SelectItem>
@@ -341,7 +341,7 @@ export function AddRendaFixaDialog() {
                   placeholder="Ex: 90"
                   value={formData.dias_carencia}
                   onChange={(e) => setFormData((prev) => ({ ...prev, dias_carencia: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
+                  className="border-primary/20 bg-background"
                 />
               </div>
             )}
@@ -350,8 +350,10 @@ export function AddRendaFixaDialog() {
           {valorProjetado !== null && (
             <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
               <div className="flex items-center gap-2 mb-2">
-                <Calculator className="h-4 w-4 text-emerald-400" />
-                <span className="text-sm font-medium text-emerald-400">Simulacao de Rendimento</span>
+                <Calculator className="h-4 w-4 text-emerald-500" />
+                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
+                  Simulacao de Rendimento
+                </span>
               </div>
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div>
@@ -360,11 +362,11 @@ export function AddRendaFixaDialog() {
                 </div>
                 <div>
                   <p className="text-muted-foreground text-xs">Valor Projetado</p>
-                  <p className="font-bold text-emerald-400">{formatCurrency(valorProjetado)}</p>
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(valorProjetado)}</p>
                 </div>
                 <div className="col-span-2">
                   <p className="text-muted-foreground text-xs">Rendimento Estimado</p>
-                  <p className="font-bold text-emerald-400">
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400">
                     +{formatCurrency(valorProjetado - Number.parseFloat(formData.valor_investido))} (
                     {(
                       ((valorProjetado - Number.parseFloat(formData.valor_investido)) /
@@ -381,7 +383,7 @@ export function AddRendaFixaDialog() {
             </div>
           )}
 
-          <Button type="submit" className="w-full neon-glow" disabled={isPending}>
+          <Button type="submit" className="w-full" disabled={isPending}>
             {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
             Adicionar Aplicacao
           </Button>
