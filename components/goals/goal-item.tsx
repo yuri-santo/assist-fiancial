@@ -16,7 +16,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { MoreVertical, Pencil, Trash, Target, Plus, PiggyBank } from "lucide-react"
+import { MoreVertical, Pencil, Trash, Target, Plus, PiggyBank, Link } from "lucide-react"
 import { formatCurrency } from "@/lib/utils/currency"
 import { formatDate } from "@/lib/utils/date"
 import type { Objetivo, Caixinha } from "@/lib/types"
@@ -48,10 +48,12 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
     fetchCaixinhas()
   }, [objetivo.id])
 
-  const porcentagem = (objetivo.valor_atual / objetivo.valor_total) * 100
-  const falta = objetivo.valor_total - objetivo.valor_atual
-
   const totalCaixinhas = caixinhasVinculadas.reduce((sum, c) => sum + c.saldo, 0)
+
+  // Use the higher value between objetivo.valor_atual and sum of caixinhas
+  const valorAtualReal = Math.max(objetivo.valor_atual, totalCaixinhas)
+  const porcentagem = (valorAtualReal / objetivo.valor_total) * 100
+  const falta = Math.max(0, objetivo.valor_total - valorAtualReal)
 
   let mensalNecessario = 0
   if (objetivo.prazo && falta > 0) {
@@ -66,10 +68,24 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
 
   const handleDelete = async () => {
     const supabase = createClient()
+    // Unlink caixinhas before deleting
+    await supabase.from("caixinhas").update({ objetivo_id: null }).eq("objetivo_id", objetivo.id)
     await supabase.from("objetivos").delete().eq("id", objetivo.id)
     setDeleting(false)
     router.refresh()
   }
+
+  useEffect(() => {
+    const syncValor = async () => {
+      if (totalCaixinhas > objetivo.valor_atual) {
+        const supabase = createClient()
+        await supabase.from("objetivos").update({ valor_atual: totalCaixinhas }).eq("id", objetivo.id)
+      }
+    }
+    if (caixinhasVinculadas.length > 0) {
+      syncValor()
+    }
+  }, [totalCaixinhas, objetivo.valor_atual, objetivo.id, caixinhasVinculadas.length])
 
   return (
     <>
@@ -125,7 +141,7 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
             <div className="flex justify-between text-sm">
               <div>
                 <p className="text-muted-foreground">Guardado</p>
-                <p className="font-semibold">{formatCurrency(objetivo.valor_atual)}</p>
+                <p className="font-semibold">{formatCurrency(valorAtualReal)}</p>
               </div>
               <div className="text-right">
                 <p className="text-muted-foreground">Meta</p>
@@ -136,12 +152,15 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
             {caixinhasVinculadas.length > 0 && (
               <div className="rounded-lg bg-primary/5 p-2 border border-primary/10">
                 <div className="flex items-center gap-1 text-xs text-muted-foreground mb-1">
-                  <PiggyBank className="h-3 w-3" />
+                  <Link className="h-3 w-3" />
                   <span>Caixinhas vinculadas:</span>
                 </div>
                 {caixinhasVinculadas.map((c) => (
                   <div key={c.id} className="flex justify-between text-xs">
-                    <span>{c.nome}</span>
+                    <span className="flex items-center gap-1">
+                      <PiggyBank className="h-3 w-3" />
+                      {c.nome}
+                    </span>
                     <span className="font-medium">{formatCurrency(c.saldo)}</span>
                   </div>
                 ))}
@@ -174,7 +193,7 @@ export function GoalItem({ objetivo, userId }: GoalItemProps) {
       </Card>
 
       <Dialog open={editing} onOpenChange={setEditing}>
-        <DialogContent className="glass-card border-primary/20 fixed top-[15%] left-1/2 -translate-x-1/2 translate-y-0 z-[100]">
+        <DialogContent className="glass-card border-primary/20 sm:max-w-md">
           <DialogHeader>
             <DialogTitle>Editar Objetivo</DialogTitle>
             <DialogDescription>Atualize as informacoes do seu objetivo</DialogDescription>

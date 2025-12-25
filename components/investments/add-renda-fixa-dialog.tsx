@@ -19,7 +19,6 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { TIPOS_RENDA_FIXA, INDEXADORES } from "@/lib/api/brapi"
 import { formatCurrency } from "@/lib/utils/currency"
-import { ScrollArea } from "@/components/ui/scroll-area"
 
 const CDI_ATUAL = 10.65
 const IPCA_ATUAL = 4.5
@@ -161,224 +160,216 @@ export function AddRendaFixaDialog() {
       <DialogTrigger asChild>
         <Button className="gap-2 neon-glow">
           <Plus className="h-4 w-4" />
-          Adicionar Aplicação
+          Adicionar Aplicacao
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[85vh] fixed top-[10%] left-1/2 -translate-x-1/2 translate-y-0 flex flex-col p-0 z-[100]">
-        <DialogHeader className="p-6 pb-0 shrink-0">
-          <DialogTitle className="neon-text">Adicionar Aplicação de Renda Fixa</DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            Preencha os dados da aplicacao incluindo a taxa de juros
-          </DialogDescription>
+      <DialogContent className="glass-card border-primary/20 sm:max-w-lg">
+        <DialogHeader>
+          <DialogTitle className="neon-text">Adicionar Aplicacao de Renda Fixa</DialogTitle>
+          <DialogDescription>Preencha os dados da aplicacao incluindo a taxa de juros</DialogDescription>
         </DialogHeader>
-        <ScrollArea className="flex-1 px-6 pb-6">
-          <form onSubmit={handleSubmit} className="space-y-4 pt-4">
-            <div className="grid gap-4 sm:grid-cols-2">
-              <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="nome">Nome da Aplicação *</Label>
-                <Input
-                  id="nome"
-                  placeholder="Ex: CDB Banco Inter 110% CDI"
-                  value={formData.nome}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="tipo">Tipo *</Label>
-                <Select
-                  value={formData.tipo}
-                  onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as any }))}
-                >
-                  <SelectTrigger className="border-primary/20 bg-background/50">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20 z-[200]">
-                    {Object.entries(TIPOS_RENDA_FIXA).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="instituicao">Instituição *</Label>
-                <Input
-                  id="instituicao"
-                  placeholder="Ex: Banco Inter, XP, BTG..."
-                  value={formData.instituicao}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, instituicao: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="valor_investido">Valor Investido (R$) *</Label>
-                <Input
-                  id="valor_investido"
-                  type="number"
-                  step="0.01"
-                  placeholder="0,00"
-                  value={formData.valor_investido}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, valor_investido: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="valor_atual">Valor Atual (R$)</Label>
-                <Input
-                  id="valor_atual"
-                  type="number"
-                  step="0.01"
-                  placeholder="Igual ao investido se vazio"
-                  value={formData.valor_atual}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, valor_atual: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="indexador">Indexador *</Label>
-                <Select
-                  value={formData.indexador}
-                  onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as any }))}
-                  required
-                >
-                  <SelectTrigger className="border-primary/20 bg-background/50">
-                    <SelectValue placeholder="Selecione" />
-                  </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20 z-[200]">
-                    {Object.entries(INDEXADORES).map(([key, { label }]) => (
-                      <SelectItem key={key} value={key}>
-                        {label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="taxa">{getTaxaLabel()}</Label>
-                <Input
-                  id="taxa"
-                  type="number"
-                  step="0.01"
-                  placeholder={getTaxaPlaceholder()}
-                  value={formData.taxa}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, taxa: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                  required
-                />
-                <p className="text-xs text-muted-foreground">
-                  {formData.indexador === "cdi" && "Digite 110 para 110% do CDI"}
-                  {formData.indexador === "ipca" && "Digite 5.5 para IPCA + 5,5%"}
-                  {formData.indexador === "prefixado" && "Digite 12.5 para 12,5% a.a."}
-                  {formData.indexador === "selic" && "Digite 100 para 100% da Selic"}
-                </p>
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="data_aplicacao">Data Aplicação *</Label>
-                <Input
-                  id="data_aplicacao"
-                  type="date"
-                  value={formData.data_aplicacao}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, data_aplicacao: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="data_vencimento">Data Vencimento</Label>
-                <Input
-                  id="data_vencimento"
-                  type="date"
-                  value={formData.data_vencimento}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, data_vencimento: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="liquidez">Liquidez</Label>
-                <Select
-                  value={formData.liquidez}
-                  onValueChange={(v) => setFormData((prev) => ({ ...prev, liquidez: v as any }))}
-                >
-                  <SelectTrigger className="border-primary/20 bg-background/50">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent className="glass-card border-primary/20 z-[200]">
-                    <SelectItem value="diaria">Diária</SelectItem>
-                    <SelectItem value="vencimento">No Vencimento</SelectItem>
-                    <SelectItem value="carencia">Com Carência</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              {formData.liquidez === "carencia" && (
-                <div className="space-y-2">
-                  <Label htmlFor="dias_carencia">Dias de Carência</Label>
-                  <Input
-                    id="dias_carencia"
-                    type="number"
-                    placeholder="Ex: 90"
-                    value={formData.dias_carencia}
-                    onChange={(e) => setFormData((prev) => ({ ...prev, dias_carencia: e.target.value }))}
-                    className="border-primary/20 bg-background/50"
-                  />
-                </div>
-              )}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2 sm:col-span-2">
+              <Label htmlFor="nome">Nome da Aplicacao *</Label>
+              <Input
+                id="nome"
+                placeholder="Ex: CDB Banco Inter 110% CDI"
+                value={formData.nome}
+                onChange={(e) => setFormData((prev) => ({ ...prev, nome: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
             </div>
 
-            {valorProjetado !== null && (
-              <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-                <div className="flex items-center gap-2 mb-2">
-                  <Calculator className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-medium text-emerald-400">Simulação de Rendimento</span>
-                </div>
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Valor Investido</p>
-                    <p className="font-bold">{formatCurrency(Number.parseFloat(formData.valor_investido) || 0)}</p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Valor Projetado</p>
-                    <p className="font-bold text-emerald-400">{formatCurrency(valorProjetado)}</p>
-                  </div>
-                  <div className="col-span-2">
-                    <p className="text-muted-foreground">Rendimento Estimado</p>
-                    <p className="font-bold text-emerald-400">
-                      +{formatCurrency(valorProjetado - Number.parseFloat(formData.valor_investido))} (
-                      {(
-                        ((valorProjetado - Number.parseFloat(formData.valor_investido)) /
-                          Number.parseFloat(formData.valor_investido)) *
-                        100
-                      ).toFixed(2)}
-                      %)
-                    </p>
-                  </div>
-                </div>
-                <p className="text-xs text-muted-foreground mt-2">
-                  * Simulação baseada em CDI {CDI_ATUAL}% a.a. e IPCA {IPCA_ATUAL}% a.a.
-                </p>
+            <div className="space-y-2">
+              <Label htmlFor="tipo">Tipo *</Label>
+              <Select value={formData.tipo} onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as any }))}>
+                <SelectTrigger className="border-primary/20 bg-background/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  {Object.entries(TIPOS_RENDA_FIXA).map(([key, { label }]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="instituicao">Instituicao *</Label>
+              <Input
+                id="instituicao"
+                placeholder="Ex: Banco Inter, XP, BTG..."
+                value={formData.instituicao}
+                onChange={(e) => setFormData((prev) => ({ ...prev, instituicao: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="valor_investido">Valor Investido (R$) *</Label>
+              <Input
+                id="valor_investido"
+                type="number"
+                step="0.01"
+                placeholder="0,00"
+                value={formData.valor_investido}
+                onChange={(e) => setFormData((prev) => ({ ...prev, valor_investido: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="valor_atual">Valor Atual (R$)</Label>
+              <Input
+                id="valor_atual"
+                type="number"
+                step="0.01"
+                placeholder="Igual ao investido se vazio"
+                value={formData.valor_atual}
+                onChange={(e) => setFormData((prev) => ({ ...prev, valor_atual: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="indexador">Indexador *</Label>
+              <Select
+                value={formData.indexador}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as any }))}
+              >
+                <SelectTrigger className="border-primary/20 bg-background/50">
+                  <SelectValue placeholder="Selecione" />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  {Object.entries(INDEXADORES).map(([key, { label }]) => (
+                    <SelectItem key={key} value={key}>
+                      {label}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="taxa">{getTaxaLabel()}</Label>
+              <Input
+                id="taxa"
+                type="number"
+                step="0.01"
+                placeholder={getTaxaPlaceholder()}
+                value={formData.taxa}
+                onChange={(e) => setFormData((prev) => ({ ...prev, taxa: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+              <p className="text-xs text-muted-foreground">
+                {formData.indexador === "cdi" && "Digite 110 para 110% do CDI"}
+                {formData.indexador === "ipca" && "Digite 5.5 para IPCA + 5,5%"}
+                {formData.indexador === "prefixado" && "Digite 12.5 para 12,5% a.a."}
+                {formData.indexador === "selic" && "Digite 100 para 100% da Selic"}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="data_aplicacao">Data Aplicacao *</Label>
+              <Input
+                id="data_aplicacao"
+                type="date"
+                value={formData.data_aplicacao}
+                onChange={(e) => setFormData((prev) => ({ ...prev, data_aplicacao: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="data_vencimento">Data Vencimento</Label>
+              <Input
+                id="data_vencimento"
+                type="date"
+                value={formData.data_vencimento}
+                onChange={(e) => setFormData((prev) => ({ ...prev, data_vencimento: e.target.value }))}
+                className="border-primary/20 bg-background/50"
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="liquidez">Liquidez</Label>
+              <Select
+                value={formData.liquidez}
+                onValueChange={(v) => setFormData((prev) => ({ ...prev, liquidez: v as any }))}
+              >
+                <SelectTrigger className="border-primary/20 bg-background/50">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="glass-card border-primary/20">
+                  <SelectItem value="diaria">Diaria</SelectItem>
+                  <SelectItem value="vencimento">No Vencimento</SelectItem>
+                  <SelectItem value="carencia">Com Carencia</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {formData.liquidez === "carencia" && (
+              <div className="space-y-2">
+                <Label htmlFor="dias_carencia">Dias de Carencia</Label>
+                <Input
+                  id="dias_carencia"
+                  type="number"
+                  placeholder="Ex: 90"
+                  value={formData.dias_carencia}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, dias_carencia: e.target.value }))}
+                  className="border-primary/20 bg-background/50"
+                />
               </div>
             )}
+          </div>
 
-            <Button type="submit" className="w-full neon-glow" disabled={isPending}>
-              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              Adicionar Aplicação
-            </Button>
-          </form>
-        </ScrollArea>
+          {valorProjetado !== null && (
+            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <div className="flex items-center gap-2 mb-2">
+                <Calculator className="h-4 w-4 text-emerald-400" />
+                <span className="text-sm font-medium text-emerald-400">Simulacao de Rendimento</span>
+              </div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-muted-foreground text-xs">Valor Investido</p>
+                  <p className="font-bold">{formatCurrency(Number.parseFloat(formData.valor_investido) || 0)}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground text-xs">Valor Projetado</p>
+                  <p className="font-bold text-emerald-400">{formatCurrency(valorProjetado)}</p>
+                </div>
+                <div className="col-span-2">
+                  <p className="text-muted-foreground text-xs">Rendimento Estimado</p>
+                  <p className="font-bold text-emerald-400">
+                    +{formatCurrency(valorProjetado - Number.parseFloat(formData.valor_investido))} (
+                    {(
+                      ((valorProjetado - Number.parseFloat(formData.valor_investido)) /
+                        Number.parseFloat(formData.valor_investido)) *
+                      100
+                    ).toFixed(2)}
+                    %)
+                  </p>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2">
+                * Simulacao baseada em CDI {CDI_ATUAL}% a.a. e IPCA {IPCA_ATUAL}% a.a.
+              </p>
+            </div>
+          )}
+
+          <Button type="submit" className="w-full neon-glow" disabled={isPending}>
+            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+            Adicionar Aplicacao
+          </Button>
+        </form>
       </DialogContent>
     </Dialog>
   )
