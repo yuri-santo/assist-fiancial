@@ -1,7 +1,10 @@
 // API gratuita para cotações de ações brasileiras
 // https://brapi.dev - sem necessidade de API key para uso básico
+// Fallback para Alpha Vantage (API gratuita com limite de 25 requisições/dia)
 
 const BRAPI_BASE_URL = "https://brapi.dev/api"
+const ALPHA_VANTAGE_BASE_URL = "https://www.alphavantage.co/query"
+const ALPHA_VANTAGE_API_KEY = "demo" // Use "demo" para testes ou sua chave gratuita
 
 export interface BrapiQuote {
   symbol: string
@@ -43,27 +46,65 @@ export interface BrapiHistoricalResponse {
   }[]
 }
 
+async function fetchFromAlphaVantage(ticker: string): Promise<BrapiQuote | null> {
+  try {
+    // Remover sufixo .SA para tickers brasileiros
+    const cleanTicker = ticker.replace(".SA", "")
+    const response = await fetch(
+      `${ALPHA_VANTAGE_BASE_URL}?function=GLOBAL_QUOTE&symbol=${cleanTicker}.SAO&apikey=${ALPHA_VANTAGE_API_KEY}`,
+      { next: { revalidate: 300 } },
+    )
+
+    if (!response.ok) return null
+
+    const data = await response.json()
+    const quote = data["Global Quote"]
+
+    if (!quote || !quote["05. price"]) return null
+
+    return {
+      symbol: ticker,
+      shortName: ticker,
+      longName: ticker,
+      currency: "BRL",
+      regularMarketPrice: Number.parseFloat(quote["05. price"]) || 0,
+      regularMarketDayHigh: Number.parseFloat(quote["03. high"]) || 0,
+      regularMarketDayLow: Number.parseFloat(quote["04. low"]) || 0,
+      regularMarketChange: Number.parseFloat(quote["09. change"]) || 0,
+      regularMarketChangePercent: Number.parseFloat(quote["10. change percent"]?.replace("%", "")) || 0,
+      regularMarketTime: new Date().toISOString(),
+      regularMarketOpen: Number.parseFloat(quote["02. open"]) || 0,
+      regularMarketVolume: Number.parseInt(quote["06. volume"]) || 0,
+      regularMarketPreviousClose: Number.parseFloat(quote["08. previous close"]) || 0,
+    }
+  } catch (error) {
+    console.error("[v0] Alpha Vantage error:", error)
+    return null
+  }
+}
+
 // Buscar cotação de um ou mais ativos
 export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
   if (tickers.length === 0) return []
 
   try {
     const tickerList = tickers.join(",")
-    const response = await fetch(
-      `${BRAPI_BASE_URL}/quote/${tickerList}?fundamental=false`,
-      { next: { revalidate: 300 } }, // Cache por 5 minutos
-    )
+    const response = await fetch(`${BRAPI_BASE_URL}/quote/${tickerList}?fundamental=false`, {
+      next: { revalidate: 300 },
+    })
 
     if (!response.ok) {
       console.error("[v0] Brapi API error:", response.status)
-      return []
+      const fallbackResults = await Promise.all(tickers.map((ticker) => fetchFromAlphaVantage(ticker)))
+      return fallbackResults.filter((r): r is BrapiQuote => r !== null)
     }
 
     const data: BrapiResponse = await response.json()
     return data.results || []
   } catch (error) {
-    console.error("[v0] Error fetching quotes:", error)
-    return []
+    console.error("[v0] Error fetching quotes, trying fallback:", error)
+    const fallbackResults = await Promise.all(tickers.map((ticker) => fetchFromAlphaVantage(ticker)))
+    return fallbackResults.filter((r): r is BrapiQuote => r !== null)
   }
 }
 
@@ -110,12 +151,27 @@ export async function searchAtivos(query: string): Promise<{ symbol: string; nam
   }
 }
 
-// Tipos de ativos
 export const TIPOS_RENDA_VARIAVEL = {
-  acao: { label: "Ação", color: "#3b82f6" },
+  acao: { label: "Ação BR", color: "#3b82f6" },
   fii: { label: "FII", color: "#10b981" },
   etf: { label: "ETF", color: "#8b5cf6" },
   bdr: { label: "BDR", color: "#f59e0b" },
+  stock: { label: "Stock (EUA)", color: "#ec4899" },
+  reit: { label: "REIT", color: "#14b8a6" },
+  cripto: { label: "Criptomoeda", color: "#f97316" },
+} as const
+
+export const MOEDAS = {
+  BRL: { label: "Real (R$)", symbol: "R$" },
+  USD: { label: "Dólar (US$)", symbol: "US$" },
+  EUR: { label: "Euro (€)", symbol: "€" },
+} as const
+
+export const MERCADOS = {
+  b3: { label: "B3 (Brasil)", country: "BR" },
+  nyse: { label: "NYSE (EUA)", country: "US" },
+  nasdaq: { label: "NASDAQ (EUA)", country: "US" },
+  crypto: { label: "Cripto", country: "GLOBAL" },
 } as const
 
 export const TIPOS_RENDA_FIXA = {

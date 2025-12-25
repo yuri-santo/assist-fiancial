@@ -110,12 +110,14 @@ export interface RendaVariavel {
   id: string
   user_id: string
   ticker: string
-  tipo: "acao" | "fii" | "etf" | "bdr"
+  tipo: "acao" | "fii" | "etf" | "bdr" | "stock" | "reit" | "cripto"
   quantidade: number
   preco_medio: number
   data_compra: string
   corretora: string | null
   setor: string | null
+  moeda: "BRL" | "USD" | "EUR"
+  mercado: "b3" | "nyse" | "nasdaq" | "crypto"
   observacoes: string | null
   created_at: string
   // Dados em tempo real (não persistidos)
