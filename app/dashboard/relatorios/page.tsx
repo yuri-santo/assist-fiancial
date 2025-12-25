@@ -16,6 +16,7 @@ import { getCotacoes } from "@/lib/api/brapi"
 import { ImportButton } from "@/components/reports/import-button"
 import { AnnualSummaryChart } from "@/components/reports/annual-summary-chart"
 import { MonthlyExpensesTable } from "@/components/reports/monthly-expenses-table"
+import { FinancialTips } from "@/components/reports/financial-tips"
 
 export default async function RelatoriosPage({
   searchParams,
@@ -44,6 +45,12 @@ export default async function RelatoriosPage({
   const yearStart = new Date(ano, 0, 1).toISOString().split("T")[0]
   const yearEnd = new Date(ano, 11, 31).toISOString().split("T")[0]
 
+  // Get date range for previous month (for comparison)
+  const prevMonthStart = new Date(ano, mes - 2, 1)
+  const prevMonthEnd = new Date(ano, mes - 1, 0)
+  const prevStart = prevMonthStart.toISOString().split("T")[0]
+  const prevEnd = prevMonthEnd.toISOString().split("T")[0]
+
   // Get data for the last 6 months for the chart
   const sixMonthsAgo = new Date(ano, mes - 6, 1)
   const chartStart = sixMonthsAgo.toISOString().split("T")[0]
@@ -61,6 +68,8 @@ export default async function RelatoriosPage({
     caixinhasRes,
     despesasAnoRes,
     receitasAnoRes,
+    despesasPrevRes,
+    receitasPrevRes,
   ] = await Promise.all([
     supabase
       .from("despesas")
@@ -86,6 +95,8 @@ export default async function RelatoriosPage({
     supabase.from("caixinhas").select("*").eq("user_id", user.id),
     supabase.from("despesas").select("*").eq("user_id", user.id).gte("data", yearStart).lte("data", yearEnd),
     supabase.from("receitas").select("*").eq("user_id", user.id).gte("data", yearStart).lte("data", yearEnd),
+    supabase.from("despesas").select("*").eq("user_id", user.id).gte("data", prevStart).lte("data", prevEnd),
+    supabase.from("receitas").select("*").eq("user_id", user.id).gte("data", prevStart).lte("data", prevEnd),
   ])
 
   const despesas = (despesasRes.data || []) as Despesa[]
@@ -100,6 +111,8 @@ export default async function RelatoriosPage({
   const caixinhas = caixinhasRes.data || []
   const despesasAno = (despesasAnoRes.data || []) as Despesa[]
   const receitasAno = (receitasAnoRes.data || []) as Receita[]
+  const despesasPrev = (despesasPrevRes.data || []) as Despesa[]
+  const receitasPrev = (receitasPrevRes.data || []) as Receita[]
 
   // Buscar cotações
   const tickers = rendaVariavel.map((a) => a.ticker)
@@ -119,6 +132,9 @@ export default async function RelatoriosPage({
   const totalReceitas = receitas.reduce((sum, r) => sum + r.valor, 0)
   const saldo = totalReceitas - totalDespesas
   const economia = totalReceitas > 0 ? ((totalReceitas - totalDespesas) / totalReceitas) * 100 : 0
+
+  const totalDespesasPrev = despesasPrev.reduce((sum, d) => sum + d.valor, 0)
+  const totalReceitasPrev = receitasPrev.reduce((sum, r) => sum + r.valor, 0)
 
   // Patrimônio total
   const patrimonioTotal = totalRendaVariavel + totalRendaFixa + totalCaixinhas + totalObjetivos
@@ -183,6 +199,21 @@ export default async function RelatoriosPage({
     reserva: totalCaixinhas + totalObjetivos,
   }
 
+  const tipsData = {
+    receitas: totalReceitas,
+    despesas: totalDespesas,
+    despesasFixas: healthData.despesasFixas,
+    despesasVariaveis: healthData.despesasVariaveis,
+    investimentos: totalRendaVariavel + totalRendaFixa,
+    reserva: totalCaixinhas + totalObjetivos,
+    patrimonio: patrimonioTotal,
+    limiteCartoes: totalLimiteCartoes,
+    objetivos: totalObjetivos,
+    economia,
+    receitasMesAnterior: totalReceitasPrev,
+    despesasMesAnterior: totalDespesasPrev,
+  }
+
   const totalDespesasAno = despesasAno.reduce((sum, d) => sum + d.valor, 0)
   const totalReceitasAno = receitasAno.reduce((sum, r) => sum + r.valor, 0)
   const saldoAnual = totalReceitasAno - totalDespesasAno
@@ -205,39 +236,39 @@ export default async function RelatoriosPage({
         <>
           {/* Annual Summary Cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="card-3d glass-card overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent group-hover:from-emerald-500/20 transition-all" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card group">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent group-hover:from-emerald-500/20 transition-all -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Receitas Anuais</CardTitle>
                 <TrendingUp className="h-5 w-5 text-emerald-400" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold text-emerald-400">{formatCurrency(totalReceitasAno)}</div>
                 <p className="text-sm text-muted-foreground">{receitasAno.length} transacoes no ano</p>
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent group-hover:from-red-500/20 transition-all" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card group">
+              <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent group-hover:from-red-500/20 transition-all -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Despesas Anuais</CardTitle>
                 <TrendingDown className="h-5 w-5 text-red-400" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold text-red-400">{formatCurrency(totalDespesasAno)}</div>
                 <p className="text-sm text-muted-foreground">{despesasAno.length} transacoes no ano</p>
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden group">
+            <Card className="card-3d glass-card group">
               <div
-                className={`absolute inset-0 bg-gradient-to-br ${saldoAnual >= 0 ? "from-cyan-500/10 group-hover:from-cyan-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+                className={`absolute inset-0 bg-gradient-to-br ${saldoAnual >= 0 ? "from-cyan-500/10 group-hover:from-cyan-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all -z-10`}
               />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Saldo Anual</CardTitle>
                 <BarChart3 className={`h-5 w-5 ${saldoAnual >= 0 ? "text-cyan-400" : "text-amber-400"}`} />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className={`text-2xl font-bold ${saldoAnual >= 0 ? "text-cyan-400" : "text-amber-400"}`}>
                   {saldoAnual >= 0 ? "+" : ""}
                   {formatCurrency(saldoAnual)}
@@ -246,17 +277,17 @@ export default async function RelatoriosPage({
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden group">
+            <Card className="card-3d glass-card group">
               <div
-                className={`absolute inset-0 bg-gradient-to-br ${totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "from-emerald-500/10 group-hover:from-emerald-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+                className={`absolute inset-0 bg-gradient-to-br ${totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "from-emerald-500/10 group-hover:from-emerald-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all -z-10`}
               />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Economia Anual</CardTitle>
                 <PiggyBank
                   className={`h-5 w-5 ${totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "text-emerald-400" : "text-amber-400"}`}
                 />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div
                   className={`text-2xl font-bold ${totalReceitasAno > 0 && (saldoAnual / totalReceitasAno) * 100 >= 20 ? "text-emerald-400" : "text-amber-400"}`}
                 >
@@ -279,39 +310,39 @@ export default async function RelatoriosPage({
         <>
           {/* Monthly view - existing cards */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="card-3d glass-card overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent group-hover:from-emerald-500/20 transition-all" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card group">
+              <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/10 to-transparent group-hover:from-emerald-500/20 transition-all -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Receitas</CardTitle>
                 <TrendingUp className="h-5 w-5 text-emerald-400" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold text-emerald-400">{formatCurrency(totalReceitas)}</div>
                 <p className="text-sm text-muted-foreground">{receitas.length} transacoes</p>
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden group">
-              <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent group-hover:from-red-500/20 transition-all" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card group">
+              <div className="absolute inset-0 bg-gradient-to-br from-red-500/10 to-transparent group-hover:from-red-500/20 transition-all -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Despesas</CardTitle>
                 <TrendingDown className="h-5 w-5 text-red-400" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold text-red-400">{formatCurrency(totalDespesas)}</div>
                 <p className="text-sm text-muted-foreground">{despesas.length} transacoes</p>
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden group">
+            <Card className="card-3d glass-card group">
               <div
-                className={`absolute inset-0 bg-gradient-to-br ${saldo >= 0 ? "from-cyan-500/10 group-hover:from-cyan-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+                className={`absolute inset-0 bg-gradient-to-br ${saldo >= 0 ? "from-cyan-500/10 group-hover:from-cyan-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all -z-10`}
               />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Saldo do Mes</CardTitle>
                 <BarChart3 className={`h-5 w-5 ${saldo >= 0 ? "text-cyan-400" : "text-amber-400"}`} />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className={`text-2xl font-bold ${saldo >= 0 ? "text-cyan-400" : "text-amber-400"}`}>
                   {saldo >= 0 ? "+" : ""}
                   {formatCurrency(saldo)}
@@ -320,15 +351,15 @@ export default async function RelatoriosPage({
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden group">
+            <Card className="card-3d glass-card group">
               <div
-                className={`absolute inset-0 bg-gradient-to-br ${economia >= 20 ? "from-emerald-500/10 group-hover:from-emerald-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all`}
+                className={`absolute inset-0 bg-gradient-to-br ${economia >= 20 ? "from-emerald-500/10 group-hover:from-emerald-500/20" : "from-amber-500/10 group-hover:from-amber-500/20"} to-transparent transition-all -z-10`}
               />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Taxa de Economia</CardTitle>
                 <PiggyBank className={`h-5 w-5 ${economia >= 20 ? "text-emerald-400" : "text-amber-400"}`} />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className={`text-2xl font-bold ${economia >= 20 ? "text-emerald-400" : "text-amber-400"}`}>
                   {economia.toFixed(1)}%
                 </div>
@@ -339,54 +370,56 @@ export default async function RelatoriosPage({
 
           {/* Patrimônio */}
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-            <Card className="card-3d glass-card overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card">
+              <div className="absolute inset-0 bg-gradient-to-br from-primary/10 to-transparent -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Patrimonio Total</CardTitle>
                 <Wallet className="h-5 w-5 text-primary" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold neon-text">{formatCurrency(patrimonioTotal)}</div>
                 <p className="text-sm text-muted-foreground">Investimentos + Reservas</p>
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card">
+              <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Investimentos</CardTitle>
                 <TrendingUp className="h-5 w-5 text-blue-400" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(totalRendaVariavel + totalRendaFixa)}</div>
                 <p className="text-sm text-muted-foreground">RV + RF</p>
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card">
+              <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Limite Cartoes</CardTitle>
                 <CreditCard className="h-5 w-5 text-purple-400" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(totalLimiteCartoes)}</div>
                 <p className="text-sm text-muted-foreground">{cartoes.length} cartoes</p>
               </CardContent>
             </Card>
 
-            <Card className="card-3d glass-card overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent" />
-              <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+            <Card className="card-3d glass-card">
+              <div className="absolute inset-0 bg-gradient-to-br from-amber-500/10 to-transparent -z-10" />
+              <CardHeader className="flex flex-row items-center justify-between pb-2">
                 <CardTitle className="text-sm font-medium text-muted-foreground">Objetivos</CardTitle>
                 <Target className="h-5 w-5 text-amber-400" />
               </CardHeader>
-              <CardContent className="relative">
+              <CardContent>
                 <div className="text-2xl font-bold">{formatCurrency(totalObjetivos)}</div>
                 <p className="text-sm text-muted-foreground">{objetivos.length} objetivos</p>
               </CardContent>
             </Card>
           </div>
+
+          <FinancialTips data={tipsData} />
 
           {/* Gráficos principais */}
           <div className="grid gap-6 lg:grid-cols-2">

@@ -4,7 +4,7 @@
 
 ### Estrutura de Diretórios
 
-```
+\`\`\`
 /
 ├── app/                    # Next.js 16 App Router
 │   ├── api/               # Route handlers
@@ -20,7 +20,7 @@
 │   ├── supabase/         # Cliente Supabase
 │   └── utils/            # Funções utilitárias
 └── scripts/              # Scripts SQL para banco
-```
+\`\`\`
 
 ## Sistema de Investimentos
 
@@ -69,21 +69,21 @@
 
 #### Ações e Fundos (Brapi + Yahoo Finance)
 
-```typescript
+\`\`\`typescript
 import { getCotacao } from "@/lib/api/brapi"
 
 const quote = await getCotacao("PETR4")
 // Retorna: { regularMarketPrice, regularMarketChangePercent, ... }
-```
+\`\`\`
 
 #### Criptomoedas (Brapi v2)
 
-```typescript
+\`\`\`typescript
 import { getCryptoCotacao } from "@/lib/api/crypto-service"
 
 const crypto = await getCryptoCotacao("BTC", "BRL")
 // Retorna: { regularMarketPrice, marketCap, circulatingSupply, ... }
-```
+\`\`\`
 
 ### Fluxo de Adição de Ativos
 
@@ -98,27 +98,27 @@ const crypto = await getCryptoCotacao("BTC", "BRL")
 ### Cálculos Financeiros
 
 #### Valor Atual
-```
+\`\`\`
 Valor Atual = Quantidade × Cotação Atual
-```
+\`\`\`
 
 #### Lucro/Prejuízo
-```
+\`\`\`
 L/P = (Cotação Atual - Preço Médio) × Quantidade
 L/P% = ((Cotação Atual - Preço Médio) / Preço Médio) × 100
-```
+\`\`\`
 
 #### Criptomoedas (Cálculo Reverso)
-```
+\`\`\`
 Quantidade = Valor Investido ÷ Preço na Compra
 Valor Atual = Quantidade × Cotação Atual
-```
+\`\`\`
 
 ## Banco de Dados (Supabase)
 
 ### Tabela: renda_variavel
 
-```sql
+\`\`\`sql
 CREATE TABLE renda_variavel (
   id UUID PRIMARY KEY,
   user_id UUID REFERENCES auth.users(id),
@@ -134,7 +134,7 @@ CREATE TABLE renda_variavel (
   observacoes TEXT,
   created_at TIMESTAMP
 );
-```
+\`\`\`
 
 ## Componentes Principais
 
@@ -158,14 +158,14 @@ Lista de ativos com:
 
 ## Variáveis de Ambiente
 
-```env
+\`\`\`env
 # Brapi API (requerido)
 BRAPI_TOKEN=seu_token_aqui
 
 # Supabase (requerido)
 NEXT_PUBLIC_SUPABASE_URL=https://xxx.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=xxx
-```
+\`\`\`
 
 ## Boas Práticas
 

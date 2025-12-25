@@ -46,6 +46,11 @@ export interface BrapiHistoricalResponse {
 }
 
 async function fetchFromYahoo(ticker: string): Promise<BrapiQuote | null> {
+  // Only run on server side to avoid CORS issues
+  if (typeof window !== "undefined") {
+    return null
+  }
+
   try {
     const cleanTicker = ticker.replace(".SA", "").toUpperCase()
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.SA?interval=1d&range=1d`
@@ -114,18 +119,43 @@ async function fetchFromYahoo(ticker: string): Promise<BrapiQuote | null> {
       regularMarketVolume: meta.regularMarketVolume || 0,
       regularMarketPreviousClose: meta.previousClose || 0,
     }
-  } catch (err) {
-    console.error(`[v0] Yahoo Finance error for ${ticker}:`, err)
+  } catch {
+    // Silent fail - will fallback to other methods
     return null
   }
+}
+
+async function fetchFromBrapi(ticker: string): Promise<BrapiQuote | null> {
+  if (!BRAPI_TOKEN) return null
+
+  try {
+    const url = `${BRAPI_BASE_URL}/quote/${ticker}?fundamental=false`
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        Authorization: `Bearer ${BRAPI_TOKEN}`,
+        Accept: "application/json",
+      },
+    })
+
+    if (response.ok) {
+      const data: BrapiResponse = await response.json()
+      if (data.results?.[0]) {
+        return data.results[0]
+      }
+    }
+  } catch {
+    // Silent fail
+  }
+
+  return null
 }
 
 export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
   if (tickers.length === 0) return []
 
   const results: BrapiQuote[] = []
-
-  console.log(`[v0] Fetching ${tickers.length} tickers sequentially...`)
 
   for (const ticker of tickers) {
     const quote = await getCotacao(ticker)
@@ -137,43 +167,21 @@ export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
     }
   }
 
-  console.log(`[v0] Got ${results.length} quotes from ${tickers.length} tickers`)
   return results
 }
 
 export async function getCotacao(ticker: string): Promise<BrapiQuote | null> {
-  // Try Yahoo first (no API key needed)
-  const yahooQuote = await fetchFromYahoo(ticker)
-  if (yahooQuote) {
-    console.log(`[v0] Got quote from Yahoo Finance for ${ticker}`)
-    return yahooQuote
+  if (BRAPI_TOKEN) {
+    const brapiQuote = await fetchFromBrapi(ticker)
+    if (brapiQuote) {
+      return brapiQuote
+    }
   }
 
-  // Try Brapi if token available
-  if (BRAPI_TOKEN) {
-    try {
-      const url = `${BRAPI_BASE_URL}/quote/${ticker}?fundamental=false`
-      const response = await fetch(url, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(5000),
-        headers: {
-          Authorization: `Bearer ${BRAPI_TOKEN}`,
-          Accept: "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data: BrapiResponse = await response.json()
-        if (data.results?.[0]) {
-          console.log(`[v0] Got quote from Brapi for ${ticker}`)
-          return data.results[0]
-        }
-      } else {
-        console.error(`[v0] Brapi error: ${response.status}`)
-      }
-    } catch (error) {
-      console.error(`[v0] Brapi error for ${ticker}:`, error)
-    }
+  // Try Yahoo as fallback (server-side only)
+  const yahooQuote = await fetchFromYahoo(ticker)
+  if (yahooQuote) {
+    return yahooQuote
   }
 
   return null
@@ -183,6 +191,11 @@ export async function getHistorico(
   ticker: string,
   range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" = "1mo",
 ): Promise<BrapiHistoricalPrice[]> {
+  // Only run on server side
+  if (typeof window !== "undefined") {
+    return []
+  }
+
   // Try Yahoo Finance first
   try {
     const cleanTicker = ticker.replace(".SA", "").toUpperCase()
@@ -217,13 +230,12 @@ export async function getHistorico(
           .filter((p: BrapiHistoricalPrice) => p.close > 0)
 
         if (prices.length > 0) {
-          console.log(`[v0] Got ${prices.length} historical prices from Yahoo for ${ticker}`)
           return prices
         }
       }
     }
-  } catch (error) {
-    console.error(`[v0] Yahoo historical error for ${ticker}:`, error)
+  } catch {
+    // Silent fail
   }
 
   // Fallback to Brapi
@@ -243,13 +255,10 @@ export async function getHistorico(
       if (response.ok) {
         const data: BrapiHistoricalResponse = await response.json()
         const prices = data.results?.[0]?.historicalDataPrice || []
-        if (prices.length > 0) {
-          console.log(`[v0] Got ${prices.length} historical prices from Brapi for ${ticker}`)
-        }
         return prices
       }
-    } catch (error) {
-      console.error("[v0] Brapi historical error:", error)
+    } catch {
+      // Silent fail
     }
   }
 
@@ -283,8 +292,8 @@ export async function searchAtivos(query: string): Promise<{ symbol: string; nam
           return stocks.slice(0, 20).map((s: string) => ({ symbol: s, name: s }))
         }
       }
-    } catch (error) {
-      console.error("[v0] Brapi search error:", error)
+    } catch {
+      // Silent fail
     }
   }
 
@@ -364,7 +373,6 @@ export const TIPOS_RENDA_VARIAVEL = {
 export const MOEDAS = {
   BRL: { label: "Real (R$)", symbol: "R$" },
   USD: { label: "Dólar (US$)", symbol: "US$" },
-  USDT: { label: "Tether (USDT)", symbol: "USDT" },
   EUR: { label: "Euro (€)", symbol: "€" },
 } as const
 
@@ -417,6 +425,11 @@ export const SETORES = [
 ] as const
 
 export async function getCotacaoHistorica(ticker: string, date: string): Promise<number | null> {
+  // Only run on server side
+  if (typeof window !== "undefined") {
+    return null
+  }
+
   try {
     // Convert date to timestamp range (start and end of day)
     const targetDate = new Date(date)
@@ -424,8 +437,6 @@ export async function getCotacaoHistorica(ticker: string, date: string): Promise
     const endDate = new Date(targetDate)
     endDate.setDate(endDate.getDate() + 1)
     const endTimestamp = Math.floor(endDate.getTime() / 1000)
-
-    console.log(`[v0] Fetching historical price for ${ticker} on ${date}`)
 
     // Try Yahoo Finance first
     const cleanTicker = ticker.replace(".SA", "").toUpperCase()
@@ -446,7 +457,6 @@ export async function getCotacaoHistorica(ticker: string, date: string): Promise
         const quote = result.indicators?.quote?.[0]
         const closePrice = quote?.close?.[0]
         if (closePrice && closePrice > 0) {
-          console.log(`[v0] Historical price for ${ticker} on ${date}: ${closePrice}`)
           return closePrice
         }
       }
@@ -469,16 +479,13 @@ export async function getCotacaoHistorica(ticker: string, date: string): Promise
         }
 
         if (closestPrice && minDiff < 7 * 24 * 60 * 60) {
-          console.log(`[v0] Found closest historical price for ${ticker}: ${closestPrice.close}`)
           return closestPrice.close
         }
       }
     }
 
-    console.log(`[v0] No historical price found for ${ticker} on ${date}`)
     return null
-  } catch (error) {
-    console.error(`[v0] Error fetching historical price for ${ticker}:`, error)
+  } catch {
     return null
   }
 }

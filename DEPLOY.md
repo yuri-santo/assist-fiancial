@@ -44,24 +44,24 @@ Este projeto foi atualizado para corrigir a vulnerabilidade CVE-2025-55182 (Reac
 3. Execute os scripts na seguinte ordem:
 
 #### Script 1: Tabelas Principais
-```
+\`\`\`
 scripts/000_FULL_DATABASE_SETUP.sql
-```
+\`\`\`
 
 #### Script 2: Tabelas de Investimentos
-```
+\`\`\`
 scripts/005_investments_tables.sql
-```
+\`\`\`
 
 #### Script 3: Campos Adicionais de Investimentos
-```
+\`\`\`
 scripts/007_add_investment_fields.sql
-```
+\`\`\`
 
 #### Script 4: Tabela de Notificacoes
-```
+\`\`\`
 scripts/008_create_notificacoes.sql
-```
+\`\`\`
 
 **Copie TODO o conteudo de cada arquivo, cole no editor e clique em "Run".**
 
@@ -89,7 +89,7 @@ scripts/008_create_notificacoes.sql
 
 Crie um arquivo `.env.local` na raiz do projeto com as seguintes variaveis:
 
-```env
+\`\`\`env
 # ========================================
 # SUPABASE (Obrigatorio)
 # ========================================
@@ -125,7 +125,7 @@ FINNHUB_API_KEY=sua_key_aqui
 # ========================================
 # - Yahoo Finance: Usado como API PRINCIPAL (sem API key necessaria)
 # - HG Brasil: Usado como fallback secundario (demo key incluida)
-```
+\`\`\`
 
 ### Variaveis de Ambiente na Vercel
 
@@ -165,7 +165,7 @@ O sistema utiliza multiplas APIs com fallback automatico:
 
 A API Brapi requer autenticacao via **Authorization header** (nao query parameter):
 
-```javascript
+\`\`\`javascript
 // ✅ CORRETO
 fetch('https://brapi.dev/api/quote/PETR4', {
   headers: {
@@ -176,7 +176,7 @@ fetch('https://brapi.dev/api/quote/PETR4', {
 
 // ❌ ERRADO (causava 404)
 fetch('https://brapi.dev/api/quote/PETR4?token=sUCSXQ4LUHgtgLpa5WmZ4H')
-```
+\`\`\`
 
 **Endpoints Disponiveis:**
 - `GET /api/quote/{tickers}` - Cotacoes (ex: PETR4,MGLU3)
@@ -210,7 +210,7 @@ fetch('https://brapi.dev/api/quote/PETR4?token=sUCSXQ4LUHgtgLpa5WmZ4H')
 
 ### 3.2 Via CLI
 
-```bash
+\`\`\`bash
 # Instalar Vercel CLI
 npm i -g vercel
 
@@ -228,7 +228,7 @@ vercel env add BRAPI_TOKEN
 
 # Redeploy com as variaveis
 vercel --prod
-```
+\`\`\`
 
 ---
 

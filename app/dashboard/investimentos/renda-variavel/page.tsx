@@ -8,6 +8,7 @@ import { RendaVariavelList } from "@/components/investments/renda-variavel-list"
 import { AddRendaVariavelDialog } from "@/components/investments/add-renda-variavel-dialog"
 import { PortfolioChart } from "@/components/investments/portfolio-chart"
 import { VariacaoChart } from "@/components/investments/variacao-chart"
+import { InvestmentNews } from "@/components/investments/investment-news"
 
 export default async function RendaVariavelPage() {
   const supabase = await createClient()
@@ -86,35 +87,35 @@ export default async function RendaVariavelPage() {
 
       {/* Cards de resumo com efeito glass */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card className="card-3d glass-card overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+        <Card className="card-3d glass-card">
+          <div className="absolute inset-0 bg-gradient-to-br from-blue-500/10 to-transparent -z-10" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Total Investido</CardTitle>
             <DollarSign className="h-5 w-5 text-blue-400" />
           </CardHeader>
-          <CardContent className="relative">
+          <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totalInvestido)}</div>
             <p className="text-sm text-muted-foreground">{rendaVariavel.length} ativos</p>
           </CardContent>
         </Card>
 
-        <Card className="card-3d glass-card overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-transparent" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+        <Card className="card-3d glass-card">
+          <div className="absolute inset-0 bg-gradient-to-br from-cyan-500/10 to-transparent -z-10" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Valor Atual</CardTitle>
             <BarChart3 className="h-5 w-5 text-cyan-400" />
           </CardHeader>
-          <CardContent className="relative">
+          <CardContent>
             <div className="text-2xl font-bold">{formatCurrency(totalAtual)}</div>
             <p className="text-sm text-muted-foreground">Cotacao em tempo real</p>
           </CardContent>
         </Card>
 
-        <Card className="card-3d glass-card overflow-hidden">
+        <Card className="card-3d glass-card">
           <div
-            className={`absolute inset-0 bg-gradient-to-br ${totalLucroPrejuizo >= 0 ? "from-emerald-500/10" : "from-red-500/10"} to-transparent`}
+            className={`absolute inset-0 bg-gradient-to-br ${totalLucroPrejuizo >= 0 ? "from-emerald-500/10" : "from-red-500/10"} to-transparent -z-10`}
           />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Lucro/Prejuizo</CardTitle>
             {totalLucroPrejuizo >= 0 ? (
               <TrendingUp className="h-5 w-5 text-emerald-400" />
@@ -122,7 +123,7 @@ export default async function RendaVariavelPage() {
               <TrendingDown className="h-5 w-5 text-red-400" />
             )}
           </CardHeader>
-          <CardContent className="relative">
+          <CardContent>
             <div className={`text-2xl font-bold ${totalLucroPrejuizo >= 0 ? "text-emerald-400" : "text-red-400"}`}>
               {totalLucroPrejuizo >= 0 ? "+" : ""}
               {formatCurrency(totalLucroPrejuizo)}
@@ -134,13 +135,13 @@ export default async function RendaVariavelPage() {
           </CardContent>
         </Card>
 
-        <Card className="card-3d glass-card overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent" />
-          <CardHeader className="relative flex flex-row items-center justify-between pb-2">
+        <Card className="card-3d glass-card">
+          <div className="absolute inset-0 bg-gradient-to-br from-purple-500/10 to-transparent -z-10" />
+          <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">Ultima Atualizacao</CardTitle>
             <RefreshCw className="h-5 w-5 text-purple-400" />
           </CardHeader>
-          <CardContent className="relative">
+          <CardContent>
             <div className="text-2xl font-bold">Agora</div>
             <p className="text-sm text-muted-foreground">Atualiza a cada 5min</p>
           </CardContent>
@@ -153,8 +154,15 @@ export default async function RendaVariavelPage() {
         <VariacaoChart ativos={ativosComCotacao} />
       </div>
 
-      {/* Lista de ativos */}
-      <RendaVariavelList ativos={ativosComCotacao} />
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          {/* Lista de ativos */}
+          <RendaVariavelList ativos={ativosComCotacao} />
+        </div>
+        <div className="lg:col-span-1">
+          <InvestmentNews />
+        </div>
+      </div>
     </div>
   )
 }
