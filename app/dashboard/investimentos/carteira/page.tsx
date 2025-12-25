@@ -7,6 +7,7 @@ import { getCotacoes, TIPOS_RENDA_VARIAVEL, TIPOS_RENDA_FIXA } from "@/lib/api/b
 import { PortfolioChart } from "@/components/investments/portfolio-chart"
 import { PatrimonioChart } from "@/components/investments/patrimonio-chart"
 import { AlocacaoRadar } from "@/components/investments/alocacao-radar"
+import { AllocationTreemap } from "@/components/investments/allocation-treemap"
 import { PageAnimation } from "@/components/animations/page-animation"
 
 export default async function CarteiraPage() {
@@ -113,6 +114,45 @@ export default async function CarteiraPage() {
     value: valor,
     color: TIPOS_RENDA_FIXA[tipo as keyof typeof TIPOS_RENDA_FIXA]?.color || "#6b7280",
   }))
+
+  const rvPorSetor = rvComCotacao.reduce(
+    (acc, a) => {
+      const setor = a.setor || "Outros"
+      if (!acc[setor]) acc[setor] = 0
+      acc[setor] += a.valor_atual || 0
+      return acc
+    },
+    {} as Record<string, number>,
+  )
+
+  const setorColors: Record<string, string> = {
+    Financeiro: "#3b82f6",
+    "Energia Elétrica": "#f59e0b",
+    Saneamento: "#06b6d4",
+    Varejo: "#ec4899",
+    Tecnologia: "#8b5cf6",
+    Saúde: "#10b981",
+    "Construção Civil": "#f97316",
+    "Petróleo e Gás": "#1e3a5f",
+    Mineração: "#6b7280",
+    Outros: "#94a3b8",
+  }
+
+  const treemapData = Object.entries(rvPorSetor).map(([setor, valor]) => ({
+    name: setor,
+    size: valor,
+    color: setorColors[setor] || "#6b7280",
+  }))
+
+  const ativoTreemapData = rvComCotacao
+    .filter((a) => (a.valor_atual || 0) > 0)
+    .sort((a, b) => (b.valor_atual || 0) - (a.valor_atual || 0))
+    .slice(0, 15)
+    .map((a) => ({
+      name: a.ticker,
+      size: a.valor_atual || 0,
+      color: TIPOS_RENDA_VARIAVEL[a.tipo as keyof typeof TIPOS_RENDA_VARIAVEL]?.color || "#6b7280",
+    }))
 
   return (
     <div className="space-y-6">
@@ -243,6 +283,11 @@ export default async function CarteiraPage() {
           caixinhas={totalCaixinhas}
           objetivos={totalReserva}
         />
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <AllocationTreemap data={ativoTreemapData} title="Alocacao por Ativo (Top 15)" />
+        <AllocationTreemap data={treemapData} title="Alocacao por Setor" />
       </div>
 
       {/* Detalhamento por classe */}
