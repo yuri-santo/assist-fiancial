@@ -161,18 +161,22 @@ export function AddRendaFixaDialog() {
       <DialogTrigger asChild>
         <Button className="gap-2 neon-glow">
           <Plus className="h-4 w-4" />
-          Adicionar Aplicacao
+          Adicionar Aplicação
         </Button>
       </DialogTrigger>
-      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-2xl max-h-[95vh]">
-        <DialogHeader>
-          <DialogTitle className="text-primary">Adicionar Aplicacao de Renda Fixa</DialogTitle>
-          <DialogDescription>Preencha os dados da aplicacao incluindo a taxa de juros</DialogDescription>
+      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-3xl max-h-[95vh] flex flex-col p-0">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6">
+          <DialogTitle className="text-primary">Adicionar Aplicação de Renda Fixa</DialogTitle>
+          <DialogDescription>Preencha os dados da aplicação incluindo a taxa de juros</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 max-h-[calc(95vh-120px)]">
+
+        <form
+          onSubmit={handleSubmit}
+          className="flex-1 overflow-y-auto px-6 space-y-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent hover:scrollbar-thumb-primary/40"
+        >
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
-              <Label htmlFor={`${formId}-nome`}>Nome da Aplicacao *</Label>
+              <Label htmlFor={`${formId}-nome`}>Nome da Aplicação *</Label>
               <Input
                 id={`${formId}-nome`}
                 name="nome"
@@ -205,7 +209,7 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor={`${formId}-instituicao`}>Instituicao *</Label>
+              <Label htmlFor={`${formId}-instituicao`}>Instituição *</Label>
               <Input
                 id={`${formId}-instituicao`}
                 name="instituicao"
@@ -288,7 +292,7 @@ export function AddRendaFixaDialog() {
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor={`${formId}-data_aplicacao`}>Data Aplicacao *</Label>
+              <Label htmlFor={`${formId}-data_aplicacao`}>Data Aplicação *</Label>
               <Input
                 id={`${formId}-data_aplicacao`}
                 name="data_aplicacao"
@@ -324,7 +328,7 @@ export function AddRendaFixaDialog() {
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent className="border-primary/20">
-                  <SelectItem value="diaria">Diaria</SelectItem>
+                  <SelectItem value="diaria">Diária</SelectItem>
                   <SelectItem value="vencimento">No Vencimento</SelectItem>
                   <SelectItem value="carencia">Com Carencia</SelectItem>
                 </SelectContent>
@@ -348,25 +352,27 @@ export function AddRendaFixaDialog() {
           </div>
 
           {valorProjetado !== null && (
-            <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
-              <div className="flex items-center gap-2 mb-2">
-                <Calculator className="h-4 w-4 text-emerald-500" />
-                <span className="text-sm font-medium text-emerald-600 dark:text-emerald-400">
-                  Simulacao de Rendimento
-                </span>
+            <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <div className="flex items-center gap-2 mb-3">
+                <Calculator className="h-5 w-5 text-emerald-500" />
+                <span className="font-medium text-emerald-600 dark:text-emerald-400">Simulação de Rendimento</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
                 <div>
-                  <p className="text-muted-foreground text-xs">Valor Investido</p>
-                  <p className="font-bold">{formatCurrency(Number.parseFloat(formData.valor_investido) || 0)}</p>
+                  <p className="text-muted-foreground text-xs mb-1">Valor Investido</p>
+                  <p className="font-bold text-lg">
+                    {formatCurrency(Number.parseFloat(formData.valor_investido) || 0)}
+                  </p>
                 </div>
                 <div>
-                  <p className="text-muted-foreground text-xs">Valor Projetado</p>
-                  <p className="font-bold text-emerald-600 dark:text-emerald-400">{formatCurrency(valorProjetado)}</p>
+                  <p className="text-muted-foreground text-xs mb-1">Valor Projetado</p>
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400 text-lg">
+                    {formatCurrency(valorProjetado)}
+                  </p>
                 </div>
-                <div className="col-span-2">
-                  <p className="text-muted-foreground text-xs">Rendimento Estimado</p>
-                  <p className="font-bold text-emerald-600 dark:text-emerald-400">
+                <div className="col-span-1 sm:col-span-2">
+                  <p className="text-muted-foreground text-xs mb-1">Rendimento Estimado</p>
+                  <p className="font-bold text-emerald-600 dark:text-emerald-400 text-lg">
                     +{formatCurrency(valorProjetado - Number.parseFloat(formData.valor_investido))} (
                     {(
                       ((valorProjetado - Number.parseFloat(formData.valor_investido)) /
@@ -377,16 +383,18 @@ export function AddRendaFixaDialog() {
                   </p>
                 </div>
               </div>
-              <p className="text-xs text-muted-foreground mt-2">
-                * Simulacao baseada em CDI {CDI_ATUAL}% a.a. e IPCA {IPCA_ATUAL}% a.a.
+              <p className="text-xs text-muted-foreground mt-3">
+                * Simulação baseada em CDI {CDI_ATUAL}% a.a. e IPCA {IPCA_ATUAL}% a.a.
               </p>
             </div>
           )}
 
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-            Adicionar Aplicacao
-          </Button>
+          <div className="sticky bottom-0 bg-background border-t border-primary/20 -mx-6 px-6 py-4">
+            <Button type="submit" className="w-full" disabled={isPending}>
+              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Adicionar Aplicação
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

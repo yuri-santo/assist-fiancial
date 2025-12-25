@@ -102,8 +102,8 @@ export function AssetDetailDialog({ ativo, open, onOpenChange }: AssetDetailDial
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="glass-card border-primary/20 max-w-4xl max-h-[90vh] overflow-y-auto">
-        <DialogHeader>
+      <DialogContent className="glass-card border-primary/20 max-w-[95vw] sm:max-w-4xl max-h-[95vh] flex flex-col p-0">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6">
           <DialogTitle className="flex items-center gap-3">
             <span className="text-2xl font-bold neon-text">{ativo.ticker}</span>
             <span
@@ -115,169 +115,180 @@ export function AssetDetailDialog({ ativo, open, onOpenChange }: AssetDetailDial
           </DialogTitle>
         </DialogHeader>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
-          <TabsList className="grid w-full grid-cols-4 mb-4">
-            <TabsTrigger value="visao-geral" className="flex items-center gap-1">
-              <TrendingUp className="h-4 w-4" />
-              Visao Geral
-            </TabsTrigger>
-            <TabsTrigger value="grafico" className="flex items-center gap-1">
-              <LineChart className="h-4 w-4" />
-              Grafico
-            </TabsTrigger>
-            <TabsTrigger value="ohlc" className="flex items-center gap-1">
-              <CandlestickChartIcon className="h-4 w-4" />
-              OHLC
-            </TabsTrigger>
-            <TabsTrigger value="indicadores" className="flex items-center gap-1">
-              <Activity className="h-4 w-4" />
-              Indicadores
-            </TabsTrigger>
-          </TabsList>
+        <div className="flex-1 overflow-y-auto px-6 pb-6 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent hover:scrollbar-thumb-primary/40">
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+            <TabsList className="grid w-full grid-cols-2 sm:grid-cols-4 mb-4">
+              <TabsTrigger value="visao-geral" className="flex items-center gap-1 text-xs sm:text-sm">
+                <TrendingUp className="h-4 w-4" />
+                <span className="hidden sm:inline">Visão Geral</span>
+                <span className="sm:hidden">Visão</span>
+              </TabsTrigger>
+              <TabsTrigger value="grafico" className="flex items-center gap-1 text-xs sm:text-sm">
+                <LineChart className="h-4 w-4" />
+                Gráfico
+              </TabsTrigger>
+              <TabsTrigger value="ohlc" className="flex items-center gap-1 text-xs sm:text-sm">
+                <CandlestickChartIcon className="h-4 w-4" />
+                OHLC
+              </TabsTrigger>
+              <TabsTrigger value="indicadores" className="flex items-center gap-1 text-xs sm:text-sm">
+                <Activity className="h-4 w-4" />
+                <span className="hidden sm:inline">Indicadores</span>
+                <span className="sm:hidden">Ind.</span>
+              </TabsTrigger>
+            </TabsList>
 
-          <TabsContent value="visao-geral" className="space-y-4">
-            {/* Summary Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-              <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
-                <p className="text-xs text-muted-foreground">Quantidade</p>
-                <p className="text-lg font-bold">{ativo.quantidade}</p>
-              </div>
-
-              <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
-                <div className="flex items-center justify-between">
-                  <p className="text-xs text-muted-foreground">Preco Medio</p>
-                  <Button variant="ghost" size="icon" className="h-5 w-5" onClick={() => setIsEditingPM(!isEditingPM)}>
-                    <Edit2 className="h-3 w-3" />
-                  </Button>
+            <TabsContent value="visao-geral" className="space-y-4">
+              {/* Summary Cards */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+                <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
+                  <p className="text-xs text-muted-foreground">Quantidade</p>
+                  <p className="text-lg font-bold">{ativo.quantidade}</p>
                 </div>
-                {isEditingPM ? (
-                  <div className="space-y-2 mt-1">
-                    <Input
-                      type="number"
-                      step="0.01"
-                      value={newPrecoMedio}
-                      onChange={(e) => setNewPrecoMedio(e.target.value)}
-                      className="h-7 text-sm"
-                    />
-                    <div className="flex gap-1">
-                      <Button
-                        size="sm"
-                        className="h-6 text-xs flex-1"
-                        onClick={handleSavePrecoMedio}
-                        disabled={isSaving}
-                      >
-                        {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
-                        Salvar
-                      </Button>
+
+                <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
+                  <div className="flex items-center justify-between">
+                    <p className="text-xs text-muted-foreground">Preço Médio</p>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="h-5 w-5"
+                      onClick={() => setIsEditingPM(!isEditingPM)}
+                    >
+                      <Edit2 className="h-3 w-3" />
+                    </Button>
+                  </div>
+                  {isEditingPM ? (
+                    <div className="space-y-2 mt-1">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        value={newPrecoMedio}
+                        onChange={(e) => setNewPrecoMedio(e.target.value)}
+                        className="h-7 text-sm"
+                      />
+                      <div className="flex gap-1">
+                        <Button
+                          size="sm"
+                          className="h-6 text-xs flex-1"
+                          onClick={handleSavePrecoMedio}
+                          disabled={isSaving}
+                        >
+                          {isSaving ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3 mr-1" />}
+                          Salvar
+                        </Button>
+                      </div>
                     </div>
-                  </div>
-                ) : (
-                  <p className="text-lg font-bold">{formatCurrency(ativo.preco_medio)}</p>
-                )}
-              </div>
-
-              <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
-                <p className="text-xs text-muted-foreground">Cotacao Atual</p>
-                <p className="text-lg font-bold text-primary">{formatCurrency(ativo.cotacao_atual || 0)}</p>
-              </div>
-              <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
-                <p className="text-xs text-muted-foreground">Valor Investido</p>
-                <p className="text-lg font-bold">{formatCurrency(ativo.quantidade * ativo.preco_medio)}</p>
-              </div>
-            </div>
-
-            {isEditingPM && (
-              <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
-                <Label className="text-xs text-muted-foreground">Data da Compra</Label>
-                <Input
-                  type="date"
-                  value={newDataCompra}
-                  onChange={(e) => setNewDataCompra(e.target.value)}
-                  className="mt-1"
-                />
-              </div>
-            )}
-
-            {/* Profit/Loss */}
-            <div
-              className={`p-4 rounded-lg border ${lucro >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"}`}
-            >
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm text-muted-foreground">Lucro/Prejuizo Total</p>
-                  <p className={`text-2xl font-bold ${lucro >= 0 ? "text-emerald-400" : "text-red-400"}`}>
-                    {lucro >= 0 ? "+" : ""}
-                    {formatCurrency(lucro)}
-                  </p>
+                  ) : (
+                    <p className="text-lg font-bold">{formatCurrency(ativo.preco_medio)}</p>
+                  )}
                 </div>
-                <div className="text-right">
-                  <div
-                    className={`flex items-center gap-1 text-lg font-medium ${lucro >= 0 ? "text-emerald-400" : "text-red-400"}`}
-                  >
-                    {lucro >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
-                    {lucro >= 0 ? "+" : ""}
-                    {formatPercent(lucroPct)}
-                  </div>
-                  <p className="text-xs text-muted-foreground">Valor atual: {formatCurrency(ativo.valor_atual || 0)}</p>
+
+                <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
+                  <p className="text-xs text-muted-foreground">Cotação Atual</p>
+                  <p className="text-lg font-bold text-primary">{formatCurrency(ativo.cotacao_atual || 0)}</p>
+                </div>
+                <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
+                  <p className="text-xs text-muted-foreground">Valor Investido</p>
+                  <p className="text-lg font-bold">{formatCurrency(ativo.quantidade * ativo.preco_medio)}</p>
                 </div>
               </div>
-            </div>
 
-            {/* Additional Info */}
-            <div className="grid grid-cols-2 gap-4">
-              {ativo.data_compra && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Calendar className="h-4 w-4" />
-                  Data da compra: {new Date(ativo.data_compra).toLocaleDateString("pt-BR")}
-                </div>
-              )}
-              {ativo.setor && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <Building2 className="h-4 w-4" />
-                  Setor: {ativo.setor}
-                </div>
-              )}
-            </div>
-
-            {ativo.observacoes && (
-              <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
-                <p className="text-xs text-muted-foreground mb-1">Observacoes</p>
-                <p className="text-sm">{ativo.observacoes}</p>
-              </div>
-            )}
-          </TabsContent>
-
-          <TabsContent value="grafico">
-            <PriceEvolutionChart ticker={ativo.ticker} precoMedio={ativo.preco_medio} />
-          </TabsContent>
-
-          <TabsContent value="ohlc">
-            <CandlestickChart ticker={ativo.ticker} precoMedio={ativo.preco_medio} />
-          </TabsContent>
-
-          <TabsContent value="indicadores" className="space-y-4">
-            {isLoadingIndicators ? (
-              <div className="flex items-center justify-center h-64">
-                <Loader2 className="h-8 w-8 animate-spin text-primary" />
-              </div>
-            ) : indicators ? (
-              <>
-                <IndicatorsCard indicators={indicators} ticker={ativo.ticker} />
-                {indicators.dailyReturns && indicators.dailyReturns.length > 0 && (
-                  <VolatilityChart
-                    dailyReturns={indicators.dailyReturns}
-                    volatility={indicators.volatility}
-                    ticker={ativo.ticker}
+              {isEditingPM && (
+                <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
+                  <Label className="text-xs text-muted-foreground">Data da Compra</Label>
+                  <Input
+                    type="date"
+                    value={newDataCompra}
+                    onChange={(e) => setNewDataCompra(e.target.value)}
+                    className="mt-1"
                   />
-                )}
-              </>
-            ) : (
-              <div className="flex items-center justify-center h-64 text-muted-foreground">
-                <p>Carregue os indicadores clicando na aba</p>
+                </div>
+              )}
+
+              {/* Profit/Loss */}
+              <div
+                className={`p-4 rounded-lg border ${lucro >= 0 ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"}`}
+              >
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm text-muted-foreground">Lucro/Prejuízo Total</p>
+                    <p className={`text-2xl font-bold ${lucro >= 0 ? "text-emerald-400" : "text-red-400"}`}>
+                      {lucro >= 0 ? "+" : ""}
+                      {formatCurrency(lucro)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <div
+                      className={`flex items-center gap-1 text-lg font-medium ${lucro >= 0 ? "text-emerald-400" : "text-red-400"}`}
+                    >
+                      {lucro >= 0 ? <TrendingUp className="h-5 w-5" /> : <TrendingDown className="h-5 w-5" />}
+                      {lucro >= 0 ? "+" : ""}
+                      {formatPercent(lucroPct)}
+                    </div>
+                    <p className="text-xs text-muted-foreground">
+                      Valor atual: {formatCurrency(ativo.valor_atual || 0)}
+                    </p>
+                  </div>
+                </div>
               </div>
-            )}
-          </TabsContent>
-        </Tabs>
+
+              {/* Additional Info */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                {ativo.data_compra && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Calendar className="h-4 w-4" />
+                    Data da compra: {new Date(ativo.data_compra).toLocaleDateString("pt-BR")}
+                  </div>
+                )}
+                {ativo.setor && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <Building2 className="h-4 w-4" />
+                    Setor: {ativo.setor}
+                  </div>
+                )}
+              </div>
+
+              {ativo.observacoes && (
+                <div className="p-3 rounded-lg bg-background/30 border border-primary/10">
+                  <p className="text-xs text-muted-foreground mb-1">Observações</p>
+                  <p className="text-sm">{ativo.observacoes}</p>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="grafico">
+              <PriceEvolutionChart ticker={ativo.ticker} precoMedio={ativo.preco_medio} />
+            </TabsContent>
+
+            <TabsContent value="ohlc">
+              <CandlestickChart ticker={ativo.ticker} precoMedio={ativo.preco_medio} />
+            </TabsContent>
+
+            <TabsContent value="indicadores" className="space-y-4">
+              {isLoadingIndicators ? (
+                <div className="flex items-center justify-center h-64">
+                  <Loader2 className="h-8 w-8 animate-spin text-primary" />
+                </div>
+              ) : indicators ? (
+                <>
+                  <IndicatorsCard indicators={indicators} ticker={ativo.ticker} />
+                  {indicators.dailyReturns && indicators.dailyReturns.length > 0 && (
+                    <VolatilityChart
+                      dailyReturns={indicators.dailyReturns}
+                      volatility={indicators.volatility}
+                      ticker={ativo.ticker}
+                    />
+                  )}
+                </>
+              ) : (
+                <div className="flex items-center justify-center h-64 text-muted-foreground">
+                  <p>Carregue os indicadores clicando na aba</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
+        </div>
       </DialogContent>
     </Dialog>
   )

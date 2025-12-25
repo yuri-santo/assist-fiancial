@@ -17,8 +17,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Loader2, Search, RefreshCw, TrendingUp, TrendingDown, DollarSign, Calculator } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, type MERCADOS, searchAtivos, getCotacao } from "@/lib/api/brapi"
-import { getCryptoCotacao, searchCryptos } from "@/lib/api/crypto-service"
+import {
+  TIPOS_RENDA_VARIAVEL,
+  SETORES,
+  MOEDAS,
+  type MERCADOS,
+  searchAtivos,
+  getCotacao,
+  getCotacaoHistorica,
+} from "@/lib/api/brapi"
+import { getCryptoCotacao, getCryptoHistorica, searchCryptos } from "@/lib/api/crypto-service"
 import { formatCurrency } from "@/lib/utils/currency"
 
 export function AddRendaVariavelDialog() {
@@ -80,41 +88,97 @@ export function AddRendaVariavelDialog() {
     setFormData((prev) => ({ ...prev, ticker }))
     setSearchResults([])
     setSearchQuery("")
-    await fetchCotacao(ticker)
+    await fetchCotacao(ticker, formData.data_compra)
   }
 
-  const fetchCotacao = async (ticker: string) => {
+  const fetchCotacao = async (ticker: string, purchaseDate?: string) => {
     if (!ticker) return
     setIsLoadingCotacao(true)
     setApiError(null)
     try {
+      const useHistoricalPrice = purchaseDate && purchaseDate !== new Date().toISOString().split("T")[0]
+
       if (isCrypto) {
-        const cotacao = await getCryptoCotacao(ticker.toUpperCase(), formData.moeda === "BRL" ? "BRL" : "USD")
-        if (cotacao) {
-          setCotacaoAtual(cotacao.regularMarketPrice)
-          setVariacao(cotacao.regularMarketChangePercent)
-          setFormData((prev) => ({
-            ...prev,
-            preco_medio: cotacao.regularMarketPrice.toFixed(8), // Mais decimais para crypto
-          }))
+        if (useHistoricalPrice) {
+          const historicalPrice = await getCryptoHistorica(
+            ticker.toUpperCase(),
+            purchaseDate!,
+            formData.moeda === "BRL" ? "BRL" : "USD",
+          )
+          if (historicalPrice) {
+            setCotacaoAtual(historicalPrice)
+            setVariacao(null)
+            setFormData((prev) => ({
+              ...prev,
+              preco_medio: historicalPrice.toFixed(8),
+            }))
+            console.log(`[v0] Using historical crypto price for ${purchaseDate}`)
+          } else {
+            // Fallback to current price
+            const cotacao = await getCryptoCotacao(ticker.toUpperCase(), formData.moeda === "BRL" ? "BRL" : "USD")
+            if (cotacao) {
+              setCotacaoAtual(cotacao.regularMarketPrice)
+              setVariacao(cotacao.regularMarketChangePercent)
+              setFormData((prev) => ({
+                ...prev,
+                preco_medio: cotacao.regularMarketPrice.toFixed(8),
+              }))
+              setApiError("Preço histórico indisponível. Usando cotação atual.")
+            }
+          }
         } else {
-          setCotacaoAtual(null)
-          setVariacao(null)
-          setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
+          const cotacao = await getCryptoCotacao(ticker.toUpperCase(), formData.moeda === "BRL" ? "BRL" : "USD")
+          if (cotacao) {
+            setCotacaoAtual(cotacao.regularMarketPrice)
+            setVariacao(cotacao.regularMarketChangePercent)
+            setFormData((prev) => ({
+              ...prev,
+              preco_medio: cotacao.regularMarketPrice.toFixed(8),
+            }))
+          } else {
+            setCotacaoAtual(null)
+            setVariacao(null)
+            setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
+          }
         }
       } else {
-        const cotacao = await getCotacao(ticker.toUpperCase())
-        if (cotacao) {
-          setCotacaoAtual(cotacao.regularMarketPrice)
-          setVariacao(cotacao.regularMarketChangePercent)
-          setFormData((prev) => ({
-            ...prev,
-            preco_medio: cotacao.regularMarketPrice.toFixed(2),
-          }))
+        if (useHistoricalPrice) {
+          const historicalPrice = await getCotacaoHistorica(ticker.toUpperCase(), purchaseDate!)
+          if (historicalPrice) {
+            setCotacaoAtual(historicalPrice)
+            setVariacao(null)
+            setFormData((prev) => ({
+              ...prev,
+              preco_medio: historicalPrice.toFixed(2),
+            }))
+            console.log(`[v0] Using historical stock price for ${purchaseDate}`)
+          } else {
+            // Fallback to current price
+            const cotacao = await getCotacao(ticker.toUpperCase())
+            if (cotacao) {
+              setCotacaoAtual(cotacao.regularMarketPrice)
+              setVariacao(cotacao.regularMarketChangePercent)
+              setFormData((prev) => ({
+                ...prev,
+                preco_medio: cotacao.regularMarketPrice.toFixed(2),
+              }))
+              setApiError("Preço histórico indisponível. Usando cotação atual.")
+            }
+          }
         } else {
-          setCotacaoAtual(null)
-          setVariacao(null)
-          setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
+          const cotacao = await getCotacao(ticker.toUpperCase())
+          if (cotacao) {
+            setCotacaoAtual(cotacao.regularMarketPrice)
+            setVariacao(cotacao.regularMarketChangePercent)
+            setFormData((prev) => ({
+              ...prev,
+              preco_medio: cotacao.regularMarketPrice.toFixed(2),
+            }))
+          } else {
+            setCotacaoAtual(null)
+            setVariacao(null)
+            setApiError("Não foi possível obter cotação. Digite o preço manualmente.")
+          }
         }
       }
     } catch {
@@ -209,19 +273,19 @@ export function AddRendaVariavelDialog() {
           Adicionar Ativo
         </Button>
       </DialogTrigger>
-      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-2xl max-h-[95vh] flex flex-col">
-        <DialogHeader className="flex-shrink-0">
+      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-3xl max-h-[95vh] flex flex-col p-0">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6">
           <DialogTitle className="text-primary">Adicionar Ativo de Renda Variável</DialogTitle>
           <DialogDescription>
             {calcMode === "value"
-              ? "Informe o valor investido e a cotação atual. A quantidade será calculada automaticamente."
+              ? "Informe o valor investido e a cotação. A quantidade será calculada automaticamente."
               : "Preencha os dados do ativo para adicionar à sua carteira"}
           </DialogDescription>
         </DialogHeader>
 
         <form
           onSubmit={handleSubmit}
-          className="flex-1 overflow-y-auto pr-2 space-y-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent"
+          className="flex-1 overflow-y-auto px-6 pb-6 space-y-4 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent hover:scrollbar-thumb-primary/40"
         >
           {apiError && (
             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-sm">
@@ -455,10 +519,18 @@ export function AddRendaVariavelDialog() {
                 name="data_compra"
                 type="date"
                 value={formData.data_compra}
-                onChange={(e) => setFormData((prev) => ({ ...prev, data_compra: e.target.value }))}
+                onChange={(e) => {
+                  setFormData((prev) => ({ ...prev, data_compra: e.target.value }))
+                  if (formData.ticker) {
+                    fetchCotacao(formData.ticker, e.target.value)
+                  }
+                }}
                 className="border-primary/20 bg-background"
                 required
               />
+              <p className="text-xs text-muted-foreground">
+                O sistema buscará o preço do ativo nesta data automaticamente
+              </p>
             </div>
 
             <div className="space-y-2">
@@ -504,10 +576,12 @@ export function AddRendaVariavelDialog() {
             </div>
           </div>
 
-          <Button type="submit" className="w-full" disabled={isPending}>
-            {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-            Adicionar Ativo
-          </Button>
+          <div className="flex gap-2 pt-4 sticky bottom-0 bg-background border-t border-primary/20 -mx-6 px-6 py-4">
+            <Button type="submit" className="flex-1" disabled={isPending}>
+              {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
+              Adicionar Ativo
+            </Button>
+          </div>
         </form>
       </DialogContent>
     </Dialog>

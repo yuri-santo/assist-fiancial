@@ -4,7 +4,6 @@ import { useState } from "react"
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
-import { ScrollArea } from "@/components/ui/scroll-area"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { TrendingUp, Calendar, Percent, Building, Info, LineChart } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
@@ -96,100 +95,142 @@ export function RendaFixaDetailDialog({ investimento, open, onOpenChange }: Rend
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-3xl max-h-[90vh] glass-card border-primary/20 p-0">
-        <ScrollArea className="max-h-[90vh]">
-          <div className="p-6">
-            <DialogHeader>
-              <DialogTitle className="flex items-center gap-3">
-                <div
-                  className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold"
-                  style={{ backgroundColor: tipoInfo?.color || "#6b7280" }}
-                >
-                  {investimento.nome.slice(0, 2).toUpperCase()}
-                </div>
-                <div>
-                  <span className="neon-text text-xl">{investimento.nome}</span>
-                  <p className="text-sm text-muted-foreground font-normal flex items-center gap-2 mt-1">
-                    <Building className="h-3 w-3" />
-                    {investimento.instituicao}
-                  </p>
-                </div>
-              </DialogTitle>
-            </DialogHeader>
-
-            {/* Cards de resumo */}
-            <div className="grid gap-3 grid-cols-2 md:grid-cols-4 mt-6">
-              <Card className="glass-card border-primary/10">
-                <CardContent className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Investido</p>
-                  <p className="font-bold">{formatCurrency(investimento.valor_investido)}</p>
-                </CardContent>
-              </Card>
-              <Card className="glass-card border-primary/10">
-                <CardContent className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Valor Atual</p>
-                  <p className="font-bold text-primary">{formatCurrency(investimento.valor_atual)}</p>
-                </CardContent>
-              </Card>
-              <Card className="glass-card border-primary/10">
-                <CardContent className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Rendimento</p>
-                  <p className="font-bold text-emerald-400">+{formatCurrency(rendimento)}</p>
-                </CardContent>
-              </Card>
-              <Card className="glass-card border-primary/10">
-                <CardContent className="p-3 text-center">
-                  <p className="text-xs text-muted-foreground">Rentabilidade</p>
-                  <p className="font-bold text-emerald-400">+{formatPercent(rendimentoPercent)}</p>
-                </CardContent>
-              </Card>
+      <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[95vh] glass-card border-primary/20 flex flex-col p-0">
+        <DialogHeader className="flex-shrink-0 px-6 pt-6">
+          <DialogTitle className="flex items-center gap-3 flex-wrap">
+            <div
+              className="w-12 h-12 rounded-xl flex items-center justify-center text-white font-bold shrink-0"
+              style={{ backgroundColor: tipoInfo?.color || "#6b7280" }}
+            >
+              {investimento.nome.slice(0, 2).toUpperCase()}
             </div>
-
-            {/* Info do investimento */}
-            <div className="flex flex-wrap gap-2 mt-4">
-              <Badge variant="outline" style={{ borderColor: tipoInfo?.color, color: tipoInfo?.color }}>
-                {tipoInfo?.label || investimento.tipo}
-              </Badge>
-              <Badge variant="outline" className="border-cyan-500/50 text-cyan-400">
-                <Percent className="h-3 w-3 mr-1" />
-                {investimento.taxa}% {indexadorInfo?.label || ""}
-              </Badge>
-              {investimento.data_vencimento && (
-                <Badge variant="outline" className="border-amber-500/50 text-amber-400">
-                  <Calendar className="h-3 w-3 mr-1" />
-                  Vence: {new Date(investimento.data_vencimento).toLocaleDateString("pt-BR")}
-                </Badge>
-              )}
+            <div className="min-w-0">
+              <span className="neon-text text-xl block truncate">{investimento.nome}</span>
+              <p className="text-sm text-muted-foreground font-normal flex items-center gap-2 mt-1">
+                <Building className="h-3 w-3 shrink-0" />
+                <span className="truncate">{investimento.instituicao}</span>
+              </p>
             </div>
+          </DialogTitle>
+        </DialogHeader>
 
-            {/* Tabs de graficos */}
-            <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
-              <TabsList className="grid w-full grid-cols-2 bg-background/50">
-                <TabsTrigger value="evolucao" className="data-[state=active]:bg-primary/20">
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Evolucao
-                </TabsTrigger>
-                <TabsTrigger value="projecao" className="data-[state=active]:bg-primary/20">
-                  <LineChart className="h-4 w-4 mr-2" />
-                  Projecao
-                </TabsTrigger>
-              </TabsList>
+        <div className="flex-1 overflow-y-auto px-6 pb-6 scrollbar-thin scrollbar-thumb-primary/20 scrollbar-track-transparent hover:scrollbar-thumb-primary/40">
+          <div className="grid gap-3 grid-cols-2 sm:grid-cols-4 mt-6">
+            <Card className="glass-card border-primary/10">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-muted-foreground">Investido</p>
+                <p className="font-bold text-sm sm:text-base">{formatCurrency(investimento.valor_investido)}</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-primary/10">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-muted-foreground">Valor Atual</p>
+                <p className="font-bold text-primary text-sm sm:text-base">
+                  {formatCurrency(investimento.valor_atual)}
+                </p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-primary/10">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-muted-foreground">Rendimento</p>
+                <p className="font-bold text-emerald-400 text-sm sm:text-base">+{formatCurrency(rendimento)}</p>
+              </CardContent>
+            </Card>
+            <Card className="glass-card border-primary/10">
+              <CardContent className="p-3 text-center">
+                <p className="text-xs text-muted-foreground">Rentabilidade</p>
+                <p className="font-bold text-emerald-400 text-sm sm:text-base">+{formatPercent(rendimentoPercent)}</p>
+              </CardContent>
+            </Card>
+          </div>
 
-              <TabsContent value="evolucao" className="mt-4">
-                <Card className="glass-card border-primary/10">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">
-                      Evolucao do Investimento (baseado na taxa de {investimento.taxa}% a.a.)
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent>
+          <div className="flex flex-wrap gap-2 mt-4">
+            <Badge variant="outline" style={{ borderColor: tipoInfo?.color, color: tipoInfo?.color }}>
+              {tipoInfo?.label || investimento.tipo}
+            </Badge>
+            <Badge variant="outline" className="border-cyan-500/50 text-cyan-400">
+              <Percent className="h-3 w-3 mr-1" />
+              {investimento.taxa}% {indexadorInfo?.label || ""}
+            </Badge>
+            {investimento.data_vencimento && (
+              <Badge variant="outline" className="border-amber-500/50 text-amber-400">
+                <Calendar className="h-3 w-3 mr-1" />
+                Vence: {new Date(investimento.data_vencimento).toLocaleDateString("pt-BR")}
+              </Badge>
+            )}
+          </div>
+
+          <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-6">
+            <TabsList className="grid w-full grid-cols-2 bg-background/50">
+              <TabsTrigger value="evolucao" className="data-[state=active]:bg-primary/20">
+                <TrendingUp className="h-4 w-4 mr-2" />
+                Evolução
+              </TabsTrigger>
+              <TabsTrigger value="projecao" className="data-[state=active]:bg-primary/20">
+                <LineChart className="h-4 w-4 mr-2" />
+                Projeção
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="evolucao" className="mt-4">
+              <Card className="glass-card border-primary/10">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">
+                    Evolução do Investimento (baseado na taxa de {investimento.taxa}% a.a.)
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <AreaChart data={evolucaoData}>
+                        <defs>
+                          <linearGradient id="colorValorRF" x1="0" y1="0" x2="0" y2="1">
+                            <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                            <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                          </linearGradient>
+                        </defs>
+                        <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
+                        <XAxis dataKey="mes" tick={{ fill: "#9ca3af", fontSize: 10 }} />
+                        <YAxis
+                          tick={{ fill: "#9ca3af", fontSize: 10 }}
+                          tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
+                        />
+                        <Tooltip
+                          contentStyle={{
+                            backgroundColor: "rgba(0,0,0,0.8)",
+                            border: "1px solid rgba(16,185,129,0.3)",
+                            borderRadius: "8px",
+                          }}
+                          formatter={(value: number) => [formatCurrency(value), "Valor"]}
+                        />
+                        <Area
+                          type="monotone"
+                          dataKey="valor"
+                          stroke="#10b981"
+                          fill="url(#colorValorRF)"
+                          strokeWidth={2}
+                        />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+
+            <TabsContent value="projecao" className="mt-4">
+              <Card className="glass-card border-primary/10">
+                <CardHeader className="pb-2">
+                  <CardTitle className="text-sm text-muted-foreground">Projeção até o Vencimento</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {projecaoData.length > 0 ? (
                     <div className="h-64">
                       <ResponsiveContainer width="100%" height="100%">
-                        <AreaChart data={evolucaoData}>
+                        <AreaChart data={projecaoData}>
                           <defs>
-                            <linearGradient id="colorValorRF" x1="0" y1="0" x2="0" y2="1">
-                              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                            <linearGradient id="colorProjecao" x1="0" y1="0" x2="0" y2="1">
+                              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
+                              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
                             </linearGradient>
                           </defs>
                           <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
@@ -201,103 +242,57 @@ export function RendaFixaDetailDialog({ investimento, open, onOpenChange }: Rend
                           <Tooltip
                             contentStyle={{
                               backgroundColor: "rgba(0,0,0,0.8)",
-                              border: "1px solid rgba(16,185,129,0.3)",
+                              border: "1px solid rgba(59,130,246,0.3)",
                               borderRadius: "8px",
                             }}
-                            formatter={(value: number) => [formatCurrency(value), "Valor"]}
+                            formatter={(value: number) => [formatCurrency(value), "Valor Projetado"]}
                           />
                           <Area
                             type="monotone"
                             dataKey="valor"
-                            stroke="#10b981"
-                            fill="url(#colorValorRF)"
+                            stroke="#3b82f6"
+                            fill="url(#colorProjecao)"
                             strokeWidth={2}
+                            strokeDasharray="5 5"
                           />
                         </AreaChart>
                       </ResponsiveContainer>
                     </div>
-                  </CardContent>
-                </Card>
-              </TabsContent>
+                  ) : (
+                    <div className="h-64 flex items-center justify-center text-muted-foreground">
+                      <Info className="h-5 w-5 mr-2" />
+                      Sem data de vencimento definida
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </TabsContent>
+          </Tabs>
 
-              <TabsContent value="projecao" className="mt-4">
-                <Card className="glass-card border-primary/10">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-sm text-muted-foreground">Projecao ate o Vencimento</CardTitle>
-                  </CardHeader>
-                  <CardContent>
-                    {projecaoData.length > 0 ? (
-                      <div className="h-64">
-                        <ResponsiveContainer width="100%" height="100%">
-                          <AreaChart data={projecaoData}>
-                            <defs>
-                              <linearGradient id="colorProjecao" x1="0" y1="0" x2="0" y2="1">
-                                <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-                                <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                              </linearGradient>
-                            </defs>
-                            <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-                            <XAxis dataKey="mes" tick={{ fill: "#9ca3af", fontSize: 10 }} />
-                            <YAxis
-                              tick={{ fill: "#9ca3af", fontSize: 10 }}
-                              tickFormatter={(v) => `R$${(v / 1000).toFixed(0)}k`}
-                            />
-                            <Tooltip
-                              contentStyle={{
-                                backgroundColor: "rgba(0,0,0,0.8)",
-                                border: "1px solid rgba(59,130,246,0.3)",
-                                borderRadius: "8px",
-                              }}
-                              formatter={(value: number) => [formatCurrency(value), "Valor Projetado"]}
-                            />
-                            <Area
-                              type="monotone"
-                              dataKey="valor"
-                              stroke="#3b82f6"
-                              fill="url(#colorProjecao)"
-                              strokeWidth={2}
-                              strokeDasharray="5 5"
-                            />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </div>
-                    ) : (
-                      <div className="h-64 flex items-center justify-center text-muted-foreground">
-                        <Info className="h-5 w-5 mr-2" />
-                        Sem data de vencimento definida
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
-              </TabsContent>
-            </Tabs>
-
-            {/* Informacoes adicionais */}
-            <Card className="glass-card border-primary/10 mt-4">
-              <CardHeader className="pb-2">
-                <CardTitle className="text-sm">Detalhes da Aplicacao</CardTitle>
-              </CardHeader>
-              <CardContent className="grid gap-2 text-sm">
+          <Card className="glass-card border-primary/10 mt-4">
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm">Detalhes da Aplicação</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-2 text-sm">
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Data da Aplicação</span>
+                <span>{new Date(investimento.data_aplicacao).toLocaleDateString("pt-BR")}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-muted-foreground">Liquidez</span>
+                <span>{investimento.liquidez || "No vencimento"}</span>
+              </div>
+              {investimento.data_vencimento && investimento.dias_restantes && (
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Data da Aplicacao</span>
-                  <span>{new Date(investimento.data_aplicacao).toLocaleDateString("pt-BR")}</span>
+                  <span className="text-muted-foreground">Dias Restantes</span>
+                  <span className={investimento.dias_restantes <= 30 ? "text-amber-400" : ""}>
+                    {investimento.dias_restantes} dias
+                  </span>
                 </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Liquidez</span>
-                  <span>{investimento.liquidez || "No vencimento"}</span>
-                </div>
-                {investimento.data_vencimento && investimento.dias_restantes && (
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Dias Restantes</span>
-                    <span className={investimento.dias_restantes <= 30 ? "text-amber-400" : ""}>
-                      {investimento.dias_restantes} dias
-                    </span>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </ScrollArea>
+              )}
+            </CardContent>
+          </Card>
+        </div>
       </DialogContent>
     </Dialog>
   )
