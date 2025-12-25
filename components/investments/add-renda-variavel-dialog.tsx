@@ -159,14 +159,14 @@ export function AddRendaVariavelDialog() {
 
   useEffect(() => {
     if (formData.tipo === "cripto") {
-      setFormData((prev) => ({ ...prev, mercado: "crypto", setor: "" }))
+      setFormData((prev) => ({ ...prev, mercado: "crypto", setor: "", moeda: "USD" }))
     } else if (
       formData.tipo === "acao" ||
       formData.tipo === "fii" ||
       formData.tipo === "etf" ||
       formData.tipo === "bdr"
     ) {
-      setFormData((prev) => ({ ...prev, mercado: "b3" }))
+      setFormData((prev) => ({ ...prev, mercado: "b3", moeda: "BRL" }))
     } else if (formData.tipo === "stock" || formData.tipo === "reit") {
       setFormData((prev) => ({ ...prev, mercado: "nyse", moeda: "USD" }))
     }
@@ -218,7 +218,9 @@ export function AddRendaVariavelDialog() {
     setApiError(null)
 
     startTransition(() => {
-      router.refresh()
+      setTimeout(() => {
+        router.refresh()
+      }, 100)
     })
   }
 

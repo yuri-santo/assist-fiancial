@@ -41,6 +41,7 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
     const supabase = createClient()
     await supabase.from("renda_variavel").delete().eq("id", deleteId)
     setDeleteId(null)
+
     startTransition(() => {
       router.refresh()
     })
@@ -193,11 +194,11 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
       {selectedAtivo && <AssetDetailModal ativo={selectedAtivo} open={isDetailOpen} onOpenChange={setIsDetailOpen} />}
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
-        <AlertDialogContent className="glass-card border-primary/20">
+        <AlertDialogContent className="glass-card border-primary/20 z-[101]">
           <AlertDialogHeader>
-            <AlertDialogTitle>Confirmar exclusao</AlertDialogTitle>
+            <AlertDialogTitle>Confirmar exclusão</AlertDialogTitle>
             <AlertDialogDescription>
-              Tem certeza que deseja excluir este ativo? Esta acao nao pode ser desfeita.
+              Tem certeza que deseja excluir este ativo? Esta ação não pode ser desfeita.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
