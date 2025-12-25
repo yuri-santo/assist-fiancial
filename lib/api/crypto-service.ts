@@ -27,13 +27,42 @@ export interface CryptoResponse {
   took: string
 }
 
-export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "USD"): Promise<CryptoQuote | null> {
+export async function getUSDtoBRL(): Promise<number> {
+  try {
+    // Tenta buscar cotação do dólar via Brapi
+    const url = `${BRAPI_BASE_URL}/v2/currency?currency=USD-BRL`
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        Authorization: `Bearer ${BRAPI_TOKEN}`,
+        Accept: "application/json",
+      },
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      if (data.currency && data.currency[0]?.bidPrice) {
+        console.log(`[v0] USD to BRL rate: ${data.currency[0].bidPrice}`)
+        return Number.parseFloat(data.currency[0].bidPrice)
+      }
+    }
+  } catch (error) {
+    console.log("[v0] Failed to fetch USD/BRL rate, using fallback")
+  }
+
+  // Fallback para taxa estimada (atualizar manualmente ou usar outro serviço)
+  return 5.8
+}
+
+export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "BRL"): Promise<CryptoQuote | null> {
   try {
     // Remove any suffix like -USD or -BRL
     const cleanCoin = coin.replace(/-USD|-BRL/gi, "").toUpperCase()
-    const url = `${BRAPI_BASE_URL}/v2/crypto?coin=${cleanCoin}&currency=${currency}`
 
-    console.log(`[v0] Fetching crypto from Brapi v2: ${cleanCoin} in ${currency}`)
+    const url = `${BRAPI_BASE_URL}/v2/crypto?coin=${cleanCoin}&currency=USD`
+
+    console.log(`[v0] Fetching crypto from Brapi v2: ${cleanCoin} in USD`)
 
     const response = await fetch(url, {
       cache: "no-store",
@@ -58,8 +87,31 @@ export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "
       return null
     }
 
-    console.log(`[v0] Got crypto quote for ${cleanCoin}: ${data.coins[0].regularMarketPrice} ${currency}`)
-    return data.coins[0]
+    const cryptoData = data.coins[0]
+
+    if (currency === "BRL") {
+      const usdToBrl = await getUSDtoBRL()
+      const priceInBRL = cryptoData.regularMarketPrice * usdToBrl
+      const changeInBRL = cryptoData.regularMarketChange * usdToBrl
+
+      console.log(
+        `[v0] Converted ${cleanCoin}: ${cryptoData.regularMarketPrice} USD -> ${priceInBRL} BRL (rate: ${usdToBrl})`,
+      )
+
+      return {
+        ...cryptoData,
+        currency: "BRL",
+        currencyRateFromUSD: usdToBrl,
+        regularMarketPrice: priceInBRL,
+        regularMarketDayHigh: cryptoData.regularMarketDayHigh * usdToBrl,
+        regularMarketDayLow: cryptoData.regularMarketDayLow * usdToBrl,
+        regularMarketChange: changeInBRL,
+        marketCap: cryptoData.marketCap * usdToBrl,
+      }
+    }
+
+    console.log(`[v0] Got crypto quote for ${cleanCoin}: ${cryptoData.regularMarketPrice} USD`)
+    return cryptoData
   } catch (error) {
     console.error(`[v0] Crypto API error for ${coin}:`, error)
     return null
@@ -105,7 +157,7 @@ export async function searchCryptos(query: string): Promise<{ symbol: string; na
 export async function getCryptoHistorica(
   coin: string,
   date: string,
-  currency: "BRL" | "USD" = "USD",
+  currency: "BRL" | "USD" = "BRL",
 ): Promise<number | null> {
   try {
     console.log(`[v0] Fetching historical crypto price for ${coin} on ${date} in ${currency}`)
@@ -118,7 +170,7 @@ export async function getCryptoHistorica(
     if (daysDiff <= 7) {
       const currentQuote = await getCryptoCotacao(coin, currency)
       if (currentQuote) {
-        console.log(`[v0] Using current price for recent date: ${currentQuote.regularMarketPrice}`)
+        console.log(`[v0] Using current price for recent date: ${currentQuote.regularMarketPrice} ${currency}`)
         return currentQuote.regularMarketPrice
       }
     }
@@ -128,7 +180,7 @@ export async function getCryptoHistorica(
     console.log(`[v0] Historical crypto data not available, trying current price`)
     const currentQuote = await getCryptoCotacao(coin, currency)
     if (currentQuote) {
-      console.log(`[v0] Using current price as fallback: ${currentQuote.regularMarketPrice}`)
+      console.log(`[v0] Using current price as fallback: ${currentQuote.regularMarketPrice} ${currency}`)
       return currentQuote.regularMarketPrice
     }
 

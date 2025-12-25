@@ -6,10 +6,11 @@
 
 O sistema agora usa uma arquitetura unificada com fallback automático entre múltiplas APIs:
 
-1. **Yahoo Finance** (Prioridade 1 - Gratuito, sem API key)
-2. **Brapi** (Prioridade 2 - Com token para melhor performance)
-3. **CoinGecko** (Para criptomoedas quando Brapi falha)
-4. **Alpha Vantage** (Fallback para stocks dos EUA)
+1. **Brapi v2** (Prioridade 1 - Stocks BR e Crypto)
+2. **Finnhub** (Prioridade 2 - Stocks dos EUA, ETFs, REITs)
+3. **Twelve Data** (Prioridade 3 - Stocks dos EUA alternativo)
+4. **CoinGecko** (Fallback para criptomoedas)
+5. **Alpha Vantage** (Fallback final para stocks dos EUA)
 
 ```typescript
 import { getUnifiedQuote } from "@/lib/api/unified-quote-service"
@@ -52,8 +53,23 @@ interface UnifiedQuote {
   change: number          // Variação em valor absoluto
   changePercent: number   // Variação percentual
   currency: string        // Moeda (BRL, USD)
-  source: "yahoo" | "brapi" | "coingecko" | "alphavantage" | "fallback"
+  source: "brapi" | "finnhub" | "twelveData" | "coingecko" | "alphavantage" | "fallback"
 }
+```
+
+### Conversão Automática de Moedas
+
+O sistema agora converte automaticamente USD para BRL usando cotação real do dólar:
+
+```typescript
+// Criptomoedas: Brapi retorna USD, converte para BRL
+const btc = await getCryptoCotacao("BTC", "BRL")
+// USD price * taxa do dólar = BRL price
+// Ex: $95,000 * 5.80 = R$ 551,000
+
+// Stocks dos EUA: Converte se necessário
+const apple = await getUnifiedQuote("AAPL", "stock", "BRL")
+// Retorna em BRL automaticamente
 ```
 
 ## Brapi API
@@ -125,38 +141,115 @@ GET https://brapi.dev/api/available?search=PETR
 
 #### 4. Criptomoedas (`/api/v2/crypto`)
 
-```typescript
-GET https://brapi.dev/api/v2/crypto?coin=BTC&currency=BRL
+**IMPORTANTE**: A API Brapi v2 retorna preços de criptomoedas sempre em USD. O sistema converte automaticamente para BRL usando a taxa de câmbio atual.
 
-// Resposta
+```typescript
+GET https://brapi.dev/api/v2/crypto?coin=BTC&currency=USD
+
+// Resposta da API (sempre USD)
 {
   "coins": [
     {
       "coin": "BTC",
-      "currency": "BRL",
-      "currencyRateFromUSD": 5.40,
+      "currency": "USD",
       "coinName": "Bitcoin",
-      "regularMarketPrice": 540000.00,
-      "regularMarketChange": 5000.00,
-      "regularMarketChangePercent": 0.93,
-      "regularMarketDayHigh": 545000.00,
-      "regularMarketDayLow": 535000.00,
-      "circulatingSupply": 19500000,
-      "marketCap": 10530000000000
+      "regularMarketPrice": 95000.00,  // USD
+      "regularMarketChange": 1500.00,
+      "regularMarketChangePercent": 1.60,
+      ...
+    }
+  ]
+}
+
+// O serviço converte automaticamente:
+const usdToBrl = await getUSDtoBRL()  // Ex: 5.80
+const priceInBRL = 95000.00 * 5.80   // R$ 551,000.00
+```
+
+#### Taxa de Câmbio (`/api/v2/currency`)
+
+```typescript
+// Busca cotação USD/BRL atualizada
+GET https://brapi.dev/api/v2/currency?currency=USD-BRL
+
+// Resposta
+{
+  "currency": [
+    {
+      "currency": "USD-BRL",
+      "name": "Dólar Americano/Real Brasileiro",
+      "bidPrice": 5.8015,
+      "askPrice": 5.8025,
+      ...
     }
   ]
 }
 ```
 
-#### 5. Criptomoedas Disponíveis (`/api/v2/crypto/available`)
+## APIs para Stocks dos EUA (ETFs, REITs, Ações)
+
+### Finnhub API
+
+API gratuita para stocks, ETFs e REITs dos EUA em tempo real.
 
 ```typescript
-GET https://brapi.dev/api/v2/crypto/available
+// Configurar em .env.local
+FINNHUB_API_KEY=sua_chave_aqui
+
+// Buscar cotação
+GET https://finnhub.io/api/v1/quote?symbol=AAPL&token=YOUR_KEY
 
 // Resposta
 {
-  "coins": ["BTC", "ETH", "BNB", "XRP", ...]
+  "c": 185.50,    // current price
+  "d": 2.50,      // change
+  "dp": 1.37,     // change percent
+  "h": 186.20,    // high
+  "l": 184.10,    // low
+  "o": 184.50,    // open
+  "pc": 183.00    // previous close
 }
+
+// Vantagens:
+- ✅ Gratuito para uso básico
+- ✅ Dados em tempo real
+- ✅ 60 chamadas/minuto (free tier)
+- ✅ Suporte a ETFs e REITs
+
+// Obter API Key: https://finnhub.io/register
+```
+
+### Twelve Data API
+
+API alternativa para stocks dos EUA com dados detalhados.
+
+```typescript
+// Configurar em .env.local
+TWELVE_DATA_KEY=sua_chave_aqui
+
+// Buscar cotação
+GET https://api.twelvedata.com/quote?symbol=AAPL&apikey=YOUR_KEY
+
+// Resposta
+{
+  "symbol": "AAPL",
+  "name": "Apple Inc",
+  "close": 185.50,
+  "change": 2.50,
+  "percent_change": 1.37,
+  "high": 186.20,
+  "low": 184.10,
+  "open": 184.50,
+  "previous_close": 183.00,
+  "volume": 50000000
+}
+
+// Vantagens:
+- ✅ 8 req/min (free tier)
+- ✅ Dados detalhados
+- ✅ ETFs e stocks
+
+// Obter API Key: https://twelvedata.com/pricing
 ```
 
 ### Implementação Recomendada
@@ -171,7 +264,6 @@ export async function getUnifiedQuote(
   currency: "BRL" | "USD" = "BRL"
 ): Promise<UnifiedQuote | null> {
   
-  // Para criptomoedas: Brapi -> CoinGecko
   if (assetType === "crypto") {
     const brapiQuote = await getCryptoCotacao(ticker, currency)
     if (brapiQuote) return convertToBrapiFormat(brapiQuote)
@@ -182,72 +274,72 @@ export async function getUnifiedQuote(
     return null
   }
   
-  // Para ações: Yahoo -> Brapi -> Alpha Vantage
   const brapiQuote = await getBrapiCotacao(ticker)
-  if (brapiQuote) return convertToBrapiFormat(brapiQuote)
+  if (brapiQuote) {
+    // Converte USD para BRL se necessário
+    if (brapiQuote.currency === "USD" && currency === "BRL") {
+      const usdToBrl = await getUSDtoBRL()
+      return {
+        ...brapiQuote,
+        price: brapiQuote.price * usdToBrl,
+        change: brapiQuote.change * usdToBrl,
+        currency: "BRL"
+      }
+    }
+    return brapiQuote
+  }
   
-  const alphaQuote = await fetchFromAlphaVantage(ticker)
-  if (alphaQuote) return alphaQuote
+  // Fallback para APIs de stocks dos EUA
+  const usStockQuote = await getUSStockQuote(ticker)
+  if (usStockQuote) {
+    // Converte para BRL se necessário
+    if (currency === "BRL" && usStockQuote.currency === "USD") {
+      const usdToBrl = await getUSDtoBRL()
+      return {
+        ...usStockQuote,
+        price: usStockQuote.price * usdToBrl,
+        change: usStockQuote.change * usdToBrl,
+        currency: "BRL"
+      }
+    }
+    return usStockQuote
+  }
   
   return null
 }
 ```
 
-#### Busca de Preço Histórico
+#### Serviço de Conversão de Moeda
 
 ```typescript
-export async function getHistoricalPrice(
-  ticker: string,
-  date: string,
-  assetType: "stock" | "crypto",
-  currency: "BRL" | "USD" = "BRL"
-): Promise<number | null> {
-  
-  // Tenta preço histórico
-  if (assetType === "crypto") {
-    const cryptoPrice = await getCryptoHistorica(ticker, date, currency)
-    if (cryptoPrice) return cryptoPrice
-  } else {
-    const stockPrice = await getBrapiHistorica(ticker, date)
-    if (stockPrice) return stockPrice
+// lib/api/crypto-service.ts
+export async function getUSDtoBRL(): Promise<number> {
+  try {
+    // Busca cotação do dólar via Brapi
+    const url = `${BRAPI_BASE_URL}/v2/currency?currency=USD-BRL`
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+      headers: {
+        Authorization: `Bearer ${BRAPI_TOKEN}`,
+        Accept: "application/json",
+      },
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      if (data.currency && data.currency[0]?.bidPrice) {
+        return parseFloat(data.currency[0].bidPrice)
+      }
+    }
+  } catch (error) {
+    console.log("[v0] Failed to fetch USD/BRL rate, using fallback")
   }
-  
-  // Fallback: usa preço atual se histórico não disponível
-  const currentQuote = await getUnifiedQuote(ticker, assetType, currency)
-  if (currentQuote) {
-    console.log("[v0] Using current price as fallback")
-    return currentQuote.price
-  }
-  
-  return null
+
+  // Fallback para taxa estimada (atualizar periodicamente)
+  return 5.80
 }
 ```
-
-#### Cache Local
-
-```sql
--- Tabela para cache de cotações
-CREATE TABLE cotacoes_historico (
-  ticker TEXT,
-  preco DECIMAL(12,2),
-  variacao DECIMAL(8,4),
-  data DATE,
-  UNIQUE(ticker, data)
-);
-
--- Estratégia: Buscar cache se < 15 minutos, senão API
-```
-
-### Rate Limiting e Boas Práticas
-
-1. **Requisições Sequenciais**: Processar um ticker por vez para evitar 429
-2. **Delay Entre Chamadas**: 300ms entre requisições múltiplas
-3. **Debounce**: 500ms de delay em buscas de usuário
-4. **Cache**: Armazenar cotações por 15 minutos
-5. **Timeout**: 5-8 segundos máximo por requisição
-6. **Fallback Automático**: Tentar múltiplas APIs sequencialmente
-7. **Error Handling**: Logs detalhados com `[v0]` prefix
-8. **Retry Logic**: Não repetir requisições falhas imediatamente
 
 ### Exemplos de Uso
 
@@ -267,10 +359,29 @@ if (quote) {
 #### Buscar Stock dos EUA
 
 ```typescript
-const quote = await getUnifiedQuote("AAPL", "stock", "USD")
+const quote = await getUnifiedQuote("AAPL", "stock", "BRL")
 if (quote) {
-  console.log(`Apple: $${quote.price} (${quote.source})`)
+  console.log(`Apple: R$ ${quote.price} (convertido de USD)`)
+  console.log(`Fonte: ${quote.source}`)
 }
+
+// Ou em USD
+const quoteUSD = await getUnifiedQuote("AAPL", "stock", "USD")
+if (quoteUSD) {
+  console.log(`Apple: $${quoteUSD.price}`)
+}
+```
+
+#### Buscar ETF ou REIT
+
+```typescript
+// ETF
+const spy = await getUnifiedQuote("SPY", "stock", "BRL")
+console.log(`S&P 500 ETF: R$ ${spy.price}`)
+
+// REIT
+const reit = await getUnifiedQuote("O", "stock", "BRL")
+console.log(`Realty Income: R$ ${reit.price}`)
 ```
 
 #### Buscar Criptomoeda
@@ -278,163 +389,37 @@ if (quote) {
 ```typescript
 const crypto = await getUnifiedQuote("BTC", "crypto", "BRL")
 if (crypto) {
-  console.log(`Bitcoin: R$ ${crypto.price.toFixed(2)}`)
+  console.log(`Bitcoin: R$ ${crypto.price.toLocaleString('pt-BR')}`)
+  console.log(`Variação: ${crypto.changePercent}%`)
   console.log(`API usada: ${crypto.source}`)
 }
-```
 
-#### Buscar Preço Histórico
-
-```typescript
-import { getHistoricalPrice } from "@/lib/api/unified-quote-service"
-
-const price = await getHistoricalPrice(
-  "VALE3", 
-  "2024-01-15", 
-  "stock", 
-  "BRL"
-)
-
-if (price) {
-  console.log(`VALE3 em 15/01/2024: R$ ${price}`)
-} else {
-  console.log("Preço histórico não disponível")
-}
-```
-
-#### Buscar Múltiplas Cotações (Sequencial)
-
-```typescript
-const tickers = ["PETR4", "VALE3", "ITUB4"]
-const quotes = []
-
-for (const ticker of tickers) {
-  const quote = await getUnifiedQuote(ticker, "stock", "BRL")
-  if (quote) quotes.push(quote)
-  
-  // Delay para evitar rate limiting
-  await new Promise(resolve => setTimeout(resolve, 300))
-}
-
-console.log(`Obtidas ${quotes.length} de ${tickers.length} cotações`)
-```
-
-### Tratamento de Erros
-
-```typescript
-try {
-  const quote = await getUnifiedQuote(ticker, "stock", "BRL")
-  
-  if (!quote) {
-    // Nenhuma API conseguiu retornar dados
-    setError("Ativo não encontrado em nenhuma fonte. Verifique o ticker.")
-  } else {
-    // Sucesso
-    setCotacao(quote.price)
-    
-    // Avisar se usou fallback
-    if (quote.source !== "yahoo" && quote.source !== "brapi") {
-      setWarning(`Cotação obtida via ${quote.source} (API alternativa)`)
-    }
-  }
-} catch (error) {
-  // Erro de rede ou timeout
-  console.error("[v0] API Error:", error)
-  setError("Erro de conexão. Verifique sua internet e tente novamente.")
-}
-```
-
-### Debugging
-
-```typescript
-// Os serviços já incluem logs automáticos com [v0] prefix:
-
-console.log("[v0] Fetching unified quote for PETR4 (stock)")
-console.log("[v0] Trying Yahoo Finance for PETR4")
-console.log("[v0] Got quote from Yahoo Finance for PETR4")
-console.log("[v0] Using current price as fallback: 38.50")
-console.log("[v0] Quote from brapi: 38.50")
-```
-
-## APIs Individuais
-
-### Yahoo Finance (Prioridade 1)
-
-```typescript
-// Ações brasileiras: adiciona .SA
-GET https://query1.finance.yahoo.com/v8/finance/chart/PETR4.SA?interval=1d&range=1d
-
-// Stocks dos EUA: sem sufixo
-GET https://query1.finance.yahoo.com/v8/finance/chart/AAPL?interval=1d&range=1d
-
-// Vantagens:
-- ✅ Gratuito, sem API key
-- ✅ Dados em tempo real
-- ✅ Suporte global (ações BR e EUA)
-- ✅ Dados históricos completos
-
-// Desvantagens:
-- ❌ Rate limiting não documentado
-- ❌ API não oficial
-- ❌ Sem suporte a criptomoedas
-```
-
-### Brapi (Prioridade 2)
-
-```typescript
-```
-
-### CoinGecko (Fallback Crypto)
-
-```typescript
-// Cotação de criptomoeda
-GET https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=brl&include_24hr_change=true
-
-// Mapeamento comum:
-BTC -> bitcoin
-ETH -> ethereum
-BNB -> binancecoin
-
-// Vantagens:
-- ✅ Gratuito para cotações básicas
-- ✅ Suporte a 10.000+ criptomoedas
-- ✅ Dados confiáveis
-
-// Desvantagens:
-- ❌ Rate limit: 10-50 req/min
-- ❌ Requer mapeamento de símbolos
-```
-
-### Alpha Vantage (Fallback USA)
-
-```typescript
-// Requer API key (gratuito com limite)
-GET https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=AAPL&apikey=YOUR_KEY
-
-// Configure em .env.local:
-ALPHA_VANTAGE_KEY=sua_chave_aqui
-
-// Vantagens:
-- ✅ Dados oficiais de stocks dos EUA
-- ✅ API key gratuita disponível
-
-// Desvantagens:
-- ❌ Limite: 5 req/min (free tier)
-- ❌ Só stocks dos EUA
+// Exemplo de saída:
+// Bitcoin: R$ 551.000,00
+// Variação: 1.60%
+// API usada: brapi
 ```
 
 ## Fluxo de Decisão de APIs
 
 ```mermaid
 graph TD
-  A[getUnifiedQuote(ticker, type, cur)] --> B{Crypto?}
-  B -- SIM --> C[1. Brapi]
-  C --> D[2. CoinGecko]
-  D --> E[3. Retorna]
-  B -- NÃO --> F[1. Yahoo]
-  F --> G[2. Brapi]
-  G --> H[3. Alpha V.]
-  H --> E
+  A[getUnifiedQuote ticker, type, cur] --> B{Crypto?}
+  B -- SIM --> C[1. Brapi v2 USD]
+  C --> C1[Converte USD->BRL]
+  C1 --> D[2. CoinGecko]
+  D --> E[Retorna]
+  B -- NÃO --> F{Ativo BR?}
+  F -- SIM --> G[1. Brapi]
+  G --> H[Retorna]
+  F -- NÃO --> I[1. Finnhub]
+  I --> J[2. Twelve Data]
+  J --> K[3. Brapi]
+  K --> L[4. Alpha V.]
+  L --> M{USD?}
+  M -- SIM --> N[Converte USD->BRL]
+  N --> E
+  M -- NÃO --> E
 ```
 
 ## Configuração de Variáveis de Ambiente
@@ -445,24 +430,32 @@ No **Vars** da sidebar do v0, adicione:
 # Obrigatório para melhor performance
 BRAPI_TOKEN=seu_token_aqui
 
-# Opcional para fallback adicional
+# Recomendado para stocks dos EUA
+FINNHUB_API_KEY=sua_chave_aqui
+
+# Opcionais para fallback adicional
+TWELVE_DATA_KEY=sua_chave_aqui
 ALPHA_VANTAGE_KEY=sua_chave_aqui
 ```
 
 **Como obter tokens:**
 
 1. **Brapi**: https://brapi.dev/dashboard (gratuito com limites)
-2. **Alpha Vantage**: https://www.alphavantage.co/support/#api-key (gratuito)
+2. **Finnhub**: https://finnhub.io/register (gratuito - 60 req/min)
+3. **Twelve Data**: https://twelvedata.com/pricing (gratuito - 8 req/min)
+4. **Alpha Vantage**: https://www.alphavantage.co/support/#api-key (gratuito - 5 req/min)
 
 ## Próximas Integrações
 
-- [x] Yahoo Finance (stocks BR e EUA)
+- [x] Brapi v2 (stocks BR e crypto)
+- [x] Finnhub (stocks EUA, ETFs, REITs)
+- [x] Twelve Data (stocks EUA alternativo)
 - [x] CoinGecko (crypto alternativo)
 - [x] Alpha Vantage (stocks americanos)
+- [x] Conversão automática USD->BRL
 - [ ] Binance API (crypto real-time)
 - [ ] Status Invest (fundamentalista)
 - [ ] B3 Official API (institucional)
-- [ ] HG Brasil (alternativa nacional)
 
 ## Solução de Problemas
 
@@ -470,7 +463,7 @@ ALPHA_VANTAGE_KEY=sua_chave_aqui
 
 **Sintoma**: `Brapi API error: 429 Too Many Requests`
 
-**Solução**: O sistema agora processa tickers sequencialmente com delay de 300ms entre chamadas. Se persistir, o fallback para Yahoo Finance será usado automaticamente.
+**Solução**: O sistema agora processa tickers sequencialmente com delay de 300ms entre chamadas. Se persistir, o fallback para outras APIs será usado automaticamente.
 
 ### Erro 404 (Ativo Não Encontrado)
 
@@ -479,8 +472,30 @@ ALPHA_VANTAGE_KEY=sua_chave_aqui
 **Solução**: 
 1. Verifique se o ticker está correto
 2. Para ações BR, use formato sem .SA (ex: PETR4, não PETR4.SA)
-3. Para criptos, use símbolo curto (BTC, ETH, não bitcoin)
-4. O sistema tentará múltiplas APIs automaticamente
+3. Para stocks dos EUA, use ticker sem sufixo (AAPL, SPY, O)
+4. Para criptos, use símbolo curto (BTC, ETH, não bitcoin)
+5. O sistema tentará múltiplas APIs automaticamente
+
+### Preço de Cripto Incorreto (muito baixo)
+
+**Sintoma**: Bitcoin mostrando R$ 38 em vez de R$ 551.000
+
+**Causa**: API retornava USD mas sistema não estava convertendo para BRL
+
+**Solução**: Sistema agora busca taxa USD/BRL e converte automaticamente. Se o problema persistir:
+1. Verifique logs no console: `[v0] Converted BTC: 95000 USD -> 551000 BRL`
+2. Confirme que BRAPI_TOKEN está configurado nas Vars
+3. Taxa de fallback é R$ 5,80 (atualizada periodicamente)
+
+### Stocks dos EUA Não Aparecem
+
+**Sintoma**: AAPL, SPY, O etc não retornam cotação
+
+**Solução**:
+1. Configure FINNHUB_API_KEY nas Vars (recomendado)
+2. Sistema tentará: Brapi -> Finnhub -> Twelve Data -> Alpha Vantage
+3. Verifique logs: `[v0] Trying Finnhub for AAPL`
+4. Sem API keys, apenas Brapi funcionará (cobertura limitada de stocks EUA)
 
 ### Cotação Não Atualiza
 
@@ -490,9 +505,10 @@ ALPHA_VANTAGE_KEY=sua_chave_aqui
 1. Verifique conexão com internet
 2. Veja logs no console para identificar qual API falhou
 3. Sistema usa fallback automático - se todas APIs falharem, erro será exibido
+4. Para criptos, verifique se a conversão USD->BRL está acontecendo
 
 ### Preço Histórico Indisponível
 
 **Sintoma**: "Preço histórico indisponível. Usando cotação atual."
 
-**Solução**: Para datas antigas (>7 dias para crypto, >30 dias para ações), APIs gratuitas podem não ter dados. O sistema usa preço atual como fallback.
+**Solução**: Para datas antigas (>7 dias para crypto, >30 dias para ações), APIs gratuitas podem não ter dados. O sistema usa preço atual como fallback automaticamente.

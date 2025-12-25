@@ -1,10 +1,10 @@
 // Serviço unificado com fallback entre múltiplas APIs
-// Ordem de prioridade: Yahoo Finance (grátis) -> Brapi (com token) -> Fallback mock
+// Ordem de prioridade: Brapi -> US Stocks APIs -> CoinGecko
 
 import { getCotacao as getBrapiCotacao, getCotacaoHistorica as getBrapiHistorica } from "./brapi"
-import { getCryptoCotacao, getCryptoHistorica } from "./crypto-service"
+import { getCryptoCotacao, getCryptoHistorica, getUSDtoBRL } from "./crypto-service"
+import { getUSStockQuote } from "./us-stocks-service"
 
-const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_KEY || ""
 const COINGECKO_API = "https://api.coingecko.com/api/v3"
 
 export interface UnifiedQuote {
@@ -73,40 +73,6 @@ async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Prom
   }
 }
 
-async function fetchFromAlphaVantage(ticker: string): Promise<UnifiedQuote | null> {
-  if (!ALPHA_VANTAGE_KEY) return null
-
-  try {
-    console.log(`[v0] Trying Alpha Vantage for ${ticker}`)
-    const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${ticker}&apikey=${ALPHA_VANTAGE_KEY}`
-
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    })
-
-    if (!response.ok) return null
-
-    const data = await response.json()
-    const quote = data["Global Quote"]
-
-    if (!quote || !quote["05. price"]) return null
-
-    return {
-      symbol: ticker.toUpperCase(),
-      name: quote["01. symbol"] || ticker,
-      price: Number.parseFloat(quote["05. price"]),
-      change: Number.parseFloat(quote["09. change"]),
-      changePercent: Number.parseFloat(quote["10. change percent"].replace("%", "")),
-      currency: "USD",
-      source: "alphavantage",
-    }
-  } catch (error) {
-    console.error(`[v0] Alpha Vantage error for ${ticker}:`, error)
-    return null
-  }
-}
-
 export async function getUnifiedQuote(
   ticker: string,
   assetType: "stock" | "crypto",
@@ -114,22 +80,22 @@ export async function getUnifiedQuote(
 ): Promise<UnifiedQuote | null> {
   console.log(`[v0] Fetching unified quote for ${ticker} (${assetType}) in ${currency}`)
 
-  // Para criptomoedas
   if (assetType === "crypto") {
-    const brapiQuote = await getCryptoCotacao(ticker, currency)
-    if (brapiQuote) {
+    const cryptoQuote = await getCryptoCotacao(ticker, currency)
+    if (cryptoQuote) {
+      console.log(`[v0] Crypto quote found: ${cryptoQuote.regularMarketPrice} ${currency}`)
       return {
         symbol: ticker.toUpperCase(),
-        name: brapiQuote.coinName,
-        price: brapiQuote.regularMarketPrice,
-        change: brapiQuote.regularMarketChange,
-        changePercent: brapiQuote.regularMarketChangePercent,
+        name: cryptoQuote.coinName,
+        price: cryptoQuote.regularMarketPrice,
+        change: cryptoQuote.regularMarketChange,
+        changePercent: cryptoQuote.regularMarketChangePercent,
         currency: currency,
         source: "brapi",
       }
     }
 
-    console.log(`[v0] Brapi failed, trying CoinGecko for ${ticker}`)
+    console.log(`[v0] Trying CoinGecko as fallback for ${ticker}`)
     const geckoQuote = await fetchFromCoinGecko(ticker, currency)
     if (geckoQuote) return geckoQuote
 
@@ -137,24 +103,61 @@ export async function getUnifiedQuote(
     return null
   }
 
-  // Para ações/stocks
-  // Tenta Yahoo/Brapi primeiro
   const brapiQuote = await getBrapiCotacao(ticker)
   if (brapiQuote) {
+    console.log(`[v0] Brapi quote found: ${brapiQuote.regularMarketPrice} ${brapiQuote.currency}`)
+
+    // Se o ativo está em USD mas o usuário quer BRL, converter
+    let price = brapiQuote.regularMarketPrice
+    let change = brapiQuote.regularMarketChange
+    let resultCurrency = brapiQuote.currency
+
+    if (brapiQuote.currency === "USD" && currency === "BRL") {
+      const usdToBrl = await getUSDtoBRL()
+      price = brapiQuote.regularMarketPrice * usdToBrl
+      change = brapiQuote.regularMarketChange * usdToBrl
+      resultCurrency = "BRL"
+      console.log(`[v0] Converted stock from USD to BRL: ${brapiQuote.regularMarketPrice} -> ${price}`)
+    }
+
     return {
       symbol: brapiQuote.symbol,
       name: brapiQuote.shortName,
-      price: brapiQuote.regularMarketPrice,
-      change: brapiQuote.regularMarketChange,
+      price,
+      change,
       changePercent: brapiQuote.regularMarketChangePercent,
-      currency: brapiQuote.currency,
+      currency: resultCurrency,
       source: "brapi",
     }
   }
 
-  // Fallback para Alpha Vantage (stocks dos EUA)
-  const alphaQuote = await fetchFromAlphaVantage(ticker)
-  if (alphaQuote) return alphaQuote
+  console.log(`[v0] Brapi failed, trying US stock APIs for ${ticker}`)
+  const usStockQuote = await getUSStockQuote(ticker)
+  if (usStockQuote) {
+    // Converter para BRL se necessário
+    if (currency === "BRL" && usStockQuote.currency === "USD") {
+      const usdToBrl = await getUSDtoBRL()
+      return {
+        symbol: usStockQuote.symbol,
+        name: usStockQuote.name,
+        price: usStockQuote.price * usdToBrl,
+        change: usStockQuote.change * usdToBrl,
+        changePercent: usStockQuote.changePercent,
+        currency: "BRL",
+        source: usStockQuote.source,
+      }
+    }
+
+    return {
+      symbol: usStockQuote.symbol,
+      name: usStockQuote.name,
+      price: usStockQuote.price,
+      change: usStockQuote.change,
+      changePercent: usStockQuote.changePercent,
+      currency: usStockQuote.currency,
+      source: usStockQuote.source,
+    }
+  }
 
   console.error(`[v0] No quote found for ${ticker} from any source`)
   return null
