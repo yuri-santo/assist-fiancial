@@ -1,16 +1,18 @@
 "use client"
 
-import { Moon, Sun, Bell, Sparkles, Monitor } from "lucide-react"
+import { Moon, Sun, Sparkles, Monitor } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu"
 import type { Profile } from "@/lib/types"
 import { useTheme } from "@/components/providers/theme-provider"
+import { NotificationCenter } from "@/components/notifications/notification-center"
 
 interface HeaderProps {
   profile: Profile | null
+  userId?: string
 }
 
-export function Header({ profile }: HeaderProps) {
+export function Header({ profile, userId }: HeaderProps) {
   const { theme, setTheme } = useTheme()
 
   return (
@@ -22,18 +24,11 @@ export function Header({ profile }: HeaderProps) {
           </h2>
           <Sparkles className="h-4 w-4 text-primary animate-pulse" />
         </div>
-        <p className="text-sm text-muted-foreground">Bem-vindo ao seu painel financeiro do futuro</p>
+        <p className="text-sm text-muted-foreground">Bem-vindo ao seu painel financeiro</p>
       </div>
 
       <div className="flex items-center gap-2">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="relative hover:bg-primary/10 hover:text-primary transition-colors"
-        >
-          <Bell className="h-5 w-5" />
-          <span className="absolute right-1 top-1 h-2 w-2 rounded-full bg-neon-pink animate-pulse shadow-[0_0_8px_rgba(236,72,153,0.8)]" />
-        </Button>
+        {userId && <NotificationCenter userId={userId} />}
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
