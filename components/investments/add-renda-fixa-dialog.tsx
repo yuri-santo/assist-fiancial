@@ -46,7 +46,7 @@ export function AddRendaFixaDialog() {
       const dataFim = new Date(formData.data_vencimento)
       const dias = Math.ceil((dataFim.getTime() - dataInicio.getTime()) / (1000 * 60 * 60 * 24))
 
-      if (dias > 0 && valorInicial > 0) {
+      if (dias > 0 && valorInicial > 0 && taxa > 0) {
         let taxaAnual = 0
 
         if (formData.indexador === "cdi") {
@@ -61,7 +61,6 @@ export function AddRendaFixaDialog() {
           taxaAnual = taxa
         }
 
-        // Calcular juros compostos
         const anos = dias / 365
         const valorFinal = valorInicial * Math.pow(1 + taxaAnual / 100, anos)
         setValorProjetado(valorFinal)
@@ -91,7 +90,7 @@ export function AddRendaFixaDialog() {
       instituicao: formData.instituicao,
       valor_investido: valorInvestido,
       valor_atual: valorAtual,
-      taxa: Number.parseFloat(formData.taxa),
+      taxa: formData.taxa ? Number.parseFloat(formData.taxa) : 0,
       indexador: formData.indexador || null,
       data_aplicacao: formData.data_aplicacao,
       data_vencimento: formData.data_vencimento || null,
@@ -126,18 +125,18 @@ export function AddRendaFixaDialog() {
       <DialogTrigger asChild>
         <Button className="gap-2 neon-glow">
           <Plus className="h-4 w-4" />
-          Adicionar Aplicacao
+          Adicionar Aplicação
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[85vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="neon-text">Adicionar Aplicacao de Renda Fixa</DialogTitle>
+      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[90vh] fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col p-0 z-50">
+        <DialogHeader className="p-6 pb-0 shrink-0">
+          <DialogTitle className="neon-text">Adicionar Aplicação de Renda Fixa</DialogTitle>
         </DialogHeader>
         <ScrollArea className="flex-1 px-6 pb-6">
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2 sm:col-span-2">
-                <Label htmlFor="nome">Nome da Aplicacao *</Label>
+                <Label htmlFor="nome">Nome da Aplicação *</Label>
                 <Input
                   id="nome"
                   placeholder="Ex: CDB Banco Inter 110% CDI"
@@ -168,7 +167,7 @@ export function AddRendaFixaDialog() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="instituicao">Instituicao *</Label>
+                <Label htmlFor="instituicao">Instituição *</Label>
                 <Input
                   id="instituicao"
                   placeholder="Ex: Banco Inter, XP, BTG..."
@@ -207,21 +206,7 @@ export function AddRendaFixaDialog() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="taxa">Taxa (%) *</Label>
-                <Input
-                  id="taxa"
-                  type="number"
-                  step="0.01"
-                  placeholder="Ex: 110 (para 110% CDI)"
-                  value={formData.taxa}
-                  onChange={(e) => setFormData((prev) => ({ ...prev, taxa: e.target.value }))}
-                  className="border-primary/20 bg-background/50"
-                  required
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="indexador">Indexador</Label>
+                <Label htmlFor="indexador">Indexador *</Label>
                 <Select
                   value={formData.indexador}
                   onValueChange={(v) => setFormData((prev) => ({ ...prev, indexador: v as any }))}
@@ -240,7 +225,34 @@ export function AddRendaFixaDialog() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="data_aplicacao">Data Aplicacao *</Label>
+                <Label htmlFor="taxa">
+                  Taxa{" "}
+                  {formData.indexador === "cdi" || formData.indexador === "selic"
+                    ? "(% do indexador)"
+                    : formData.indexador === "ipca"
+                      ? "(% + IPCA)"
+                      : "(% a.a.)"}{" "}
+                  *
+                </Label>
+                <Input
+                  id="taxa"
+                  type="number"
+                  step="0.01"
+                  placeholder={formData.indexador === "cdi" ? "Ex: 110" : "Ex: 5.5"}
+                  value={formData.taxa}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, taxa: e.target.value }))}
+                  className="border-primary/20 bg-background/50"
+                  required
+                />
+                <p className="text-xs text-muted-foreground">
+                  {formData.indexador === "cdi" && "Ex: 110 para 110% do CDI"}
+                  {formData.indexador === "ipca" && "Ex: 5.5 para IPCA + 5,5%"}
+                  {formData.indexador === "prefixado" && "Ex: 12.5 para 12,5% a.a."}
+                </p>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="data_aplicacao">Data Aplicação *</Label>
                 <Input
                   id="data_aplicacao"
                   type="date"
@@ -272,16 +284,16 @@ export function AddRendaFixaDialog() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="glass-card border-primary/20">
-                    <SelectItem value="diaria">Diaria</SelectItem>
+                    <SelectItem value="diaria">Diária</SelectItem>
                     <SelectItem value="vencimento">No Vencimento</SelectItem>
-                    <SelectItem value="carencia">Com Carencia</SelectItem>
+                    <SelectItem value="carencia">Com Carência</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               {formData.liquidez === "carencia" && (
                 <div className="space-y-2">
-                  <Label htmlFor="dias_carencia">Dias de Carencia</Label>
+                  <Label htmlFor="dias_carencia">Dias de Carência</Label>
                   <Input
                     id="dias_carencia"
                     type="number"
@@ -298,7 +310,7 @@ export function AddRendaFixaDialog() {
               <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                 <div className="flex items-center gap-2 mb-2">
                   <Calculator className="h-4 w-4 text-emerald-400" />
-                  <span className="text-sm font-medium text-emerald-400">Simulacao de Rendimento</span>
+                  <span className="text-sm font-medium text-emerald-400">Simulação de Rendimento</span>
                 </div>
                 <div className="grid grid-cols-2 gap-4 text-sm">
                   <div>
@@ -312,7 +324,7 @@ export function AddRendaFixaDialog() {
                   <div className="col-span-2">
                     <p className="text-muted-foreground">Rendimento Estimado</p>
                     <p className="font-bold text-emerald-400">
-                      +{formatCurrency(valorProjetado - Number.parseFloat(formData.valor_investido))}(
+                      +{formatCurrency(valorProjetado - Number.parseFloat(formData.valor_investido))} (
                       {(
                         ((valorProjetado - Number.parseFloat(formData.valor_investido)) /
                           Number.parseFloat(formData.valor_investido)) *
@@ -323,14 +335,14 @@ export function AddRendaFixaDialog() {
                   </div>
                 </div>
                 <p className="text-xs text-muted-foreground mt-2">
-                  * Simulacao baseada em CDI {CDI_ATUAL}% a.a. e IPCA {IPCA_ATUAL}% a.a.
+                  * Simulação baseada em CDI {CDI_ATUAL}% a.a. e IPCA {IPCA_ATUAL}% a.a.
                 </p>
               </div>
             )}
 
             <Button type="submit" className="w-full neon-glow" disabled={isPending}>
               {isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Plus className="mr-2 h-4 w-4" />}
-              Adicionar Aplicacao
+              Adicionar Aplicação
             </Button>
           </form>
         </ScrollArea>

@@ -10,7 +10,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Plus, Loader2, Search, RefreshCw, TrendingUp, TrendingDown } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
-import { TIPOS_RENDA_VARIAVEL, SETORES, searchAtivos, getCotacao } from "@/lib/api/brapi"
+import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, MERCADOS, searchAtivos, getCotacao } from "@/lib/api/brapi"
 import { formatCurrency } from "@/lib/utils/currency"
 import { ScrollArea } from "@/components/ui/scroll-area"
 
@@ -33,6 +33,8 @@ export function AddRendaVariavelDialog() {
     data_compra: new Date().toISOString().split("T")[0],
     corretora: "",
     setor: "",
+    moeda: "BRL" as keyof typeof MOEDAS,
+    mercado: "b3" as keyof typeof MERCADOS,
     observacoes: "",
   })
 
@@ -56,7 +58,7 @@ export function AddRendaVariavelDialog() {
     return () => clearTimeout(timer)
   }, [searchQuery, handleSearch])
 
-  const handleSelectTicker = async (ticker: string, name?: string) => {
+  const handleSelectTicker = async (ticker: string) => {
     setFormData((prev) => ({ ...prev, ticker }))
     setSearchResults([])
     setSearchQuery("")
@@ -71,6 +73,10 @@ export function AddRendaVariavelDialog() {
       if (cotacao) {
         setCotacaoAtual(cotacao.regularMarketPrice)
         setVariacao(cotacao.regularMarketChangePercent)
+        setFormData((prev) => ({
+          ...prev,
+          preco_medio: cotacao.regularMarketPrice.toFixed(2),
+        }))
       } else {
         setCotacaoAtual(null)
         setVariacao(null)
@@ -80,15 +86,6 @@ export function AddRendaVariavelDialog() {
       setVariacao(null)
     }
     setIsLoadingCotacao(false)
-  }
-
-  const handleUsarCotacao = () => {
-    if (cotacaoAtual) {
-      setFormData((prev) => ({
-        ...prev,
-        preco_medio: cotacaoAtual.toFixed(2),
-      }))
-    }
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -110,6 +107,8 @@ export function AddRendaVariavelDialog() {
       data_compra: formData.data_compra,
       corretora: formData.corretora || null,
       setor: formData.setor || null,
+      moeda: formData.moeda,
+      mercado: formData.mercado,
       observacoes: formData.observacoes || null,
     })
 
@@ -122,6 +121,8 @@ export function AddRendaVariavelDialog() {
       data_compra: new Date().toISOString().split("T")[0],
       corretora: "",
       setor: "",
+      moeda: "BRL",
+      mercado: "b3",
       observacoes: "",
     })
     setCotacaoAtual(null)
@@ -140,9 +141,9 @@ export function AddRendaVariavelDialog() {
           Adicionar Ativo
         </Button>
       </DialogTrigger>
-      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[85vh] flex flex-col p-0">
-        <DialogHeader className="p-6 pb-0">
-          <DialogTitle className="neon-text">Adicionar Ativo de Renda Variavel</DialogTitle>
+      <DialogContent className="glass-card border-primary/20 max-w-lg max-h-[90vh] fixed top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 flex flex-col p-0 z-50">
+        <DialogHeader className="p-6 pb-0 shrink-0">
+          <DialogTitle className="neon-text">Adicionar Ativo de Renda Variável</DialogTitle>
         </DialogHeader>
         <ScrollArea className="flex-1 px-6 pb-6">
           <form onSubmit={handleSubmit} className="space-y-4 pt-4">
@@ -162,13 +163,13 @@ export function AddRendaVariavelDialog() {
                 )}
               </div>
               {searchResults.length > 0 && (
-                <div className="glass-card rounded-lg border border-primary/20 max-h-48 overflow-y-auto">
+                <div className="glass-card rounded-lg border border-primary/20 max-h-40 overflow-y-auto">
                   {searchResults.map((result) => (
                     <button
                       key={result.symbol}
                       type="button"
                       className="w-full px-3 py-2 text-left hover:bg-primary/10 transition-colors flex items-center justify-between"
-                      onClick={() => handleSelectTicker(result.symbol, result.name)}
+                      onClick={() => handleSelectTicker(result.symbol)}
                     >
                       <div>
                         <span className="font-bold text-primary">{result.symbol}</span>
@@ -214,7 +215,7 @@ export function AddRendaVariavelDialog() {
                 {cotacaoAtual !== null && (
                   <div className="flex items-center justify-between p-2 rounded-lg bg-background/50 border border-primary/20">
                     <div>
-                      <p className="text-xs text-muted-foreground">Cotacao atual</p>
+                      <p className="text-xs text-muted-foreground">Cotação atual</p>
                       <p className="font-bold text-primary">{formatCurrency(cotacaoAtual)}</p>
                     </div>
                     {variacao !== null && (
@@ -223,15 +224,12 @@ export function AddRendaVariavelDialog() {
                         <span className="text-sm font-medium">{variacao.toFixed(2)}%</span>
                       </div>
                     )}
-                    <Button type="button" variant="ghost" size="sm" onClick={handleUsarCotacao}>
-                      Usar
-                    </Button>
                   </div>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="tipo">Tipo *</Label>
+                <Label htmlFor="tipo">Tipo de Ativo *</Label>
                 <Select
                   value={formData.tipo}
                   onValueChange={(v) => setFormData((prev) => ({ ...prev, tipo: v as any }))}
@@ -241,6 +239,44 @@ export function AddRendaVariavelDialog() {
                   </SelectTrigger>
                   <SelectContent className="glass-card border-primary/20">
                     {Object.entries(TIPOS_RENDA_VARIAVEL).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="moeda">Moeda *</Label>
+                <Select
+                  value={formData.moeda}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, moeda: v as any }))}
+                >
+                  <SelectTrigger className="border-primary/20 bg-background/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass-card border-primary/20">
+                    {Object.entries(MOEDAS).map(([key, { label }]) => (
+                      <SelectItem key={key} value={key}>
+                        {label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="mercado">Mercado *</Label>
+                <Select
+                  value={formData.mercado}
+                  onValueChange={(v) => setFormData((prev) => ({ ...prev, mercado: v as any }))}
+                >
+                  <SelectTrigger className="border-primary/20 bg-background/50">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="glass-card border-primary/20">
+                    {Object.entries(MERCADOS).map(([key, { label }]) => (
                       <SelectItem key={key} value={key}>
                         {label}
                       </SelectItem>
@@ -264,17 +300,18 @@ export function AddRendaVariavelDialog() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="preco_medio">Preco Medio (R$) *</Label>
+                <Label htmlFor="preco_medio">Preço Médio *</Label>
                 <Input
                   id="preco_medio"
                   type="number"
                   step="0.01"
-                  placeholder="0,00"
+                  placeholder="Preenchido automaticamente"
                   value={formData.preco_medio}
                   onChange={(e) => setFormData((prev) => ({ ...prev, preco_medio: e.target.value }))}
                   className="border-primary/20 bg-background/50"
                   required
                 />
+                <p className="text-xs text-muted-foreground">Preenchido ao buscar cotação</p>
               </div>
 
               <div className="space-y-2">
