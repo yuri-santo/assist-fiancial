@@ -1,11 +1,14 @@
 // Serviço unificado com fallback entre múltiplas APIs
-// Ordem de prioridade: Brapi -> US Stocks APIs -> CoinGecko
+// Ordem de prioridade: CoinGecko (crypto) -> Brapi -> US Stocks APIs
 
 import { getCotacao as getBrapiCotacao, getCotacaoHistorica as getBrapiHistorica } from "./brapi"
 import { getCryptoCotacao, getCryptoHistorica, getUSDtoBRL } from "./crypto-service"
 import { getUSStockQuote } from "./us-stocks-service"
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3"
+
+const quoteCache = new Map<string, { data: UnifiedQuote; timestamp: number }>()
+const CACHE_TTL = 60 * 1000 // 1 minute cache
 
 export interface UnifiedQuote {
   symbol: string
@@ -19,8 +22,6 @@ export interface UnifiedQuote {
 
 async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Promise<UnifiedQuote | null> {
   try {
-    console.log(`[v0] Trying CoinGecko for ${ticker}`)
-
     // Map common crypto tickers to CoinGecko IDs
     const coinIdMap: Record<string, string> = {
       BTC: "bitcoin",
@@ -37,9 +38,21 @@ async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Prom
       AVAX: "avalanche-2",
       UNI: "uniswap",
       LINK: "chainlink",
+      TRX: "tron",
+      ATOM: "cosmos",
+      XLM: "stellar",
+      ETC: "ethereum-classic",
+      FIL: "filecoin",
+      HBAR: "hedera-hashgraph",
     }
 
     const coinId = coinIdMap[ticker.toUpperCase()] || ticker.toLowerCase()
+
+    // Check if it's a valid crypto ticker
+    if (!coinIdMap[ticker.toUpperCase()] && ticker.length > 5) {
+      return null // Likely not a crypto
+    }
+
     const vsCurrency = currency.toLowerCase()
     const url = `${COINGECKO_API}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}&include_24hr_change=true`
 
@@ -67,8 +80,8 @@ async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Prom
       currency: currency,
       source: "coingecko",
     }
-  } catch (error) {
-    console.error(`[v0] CoinGecko error for ${ticker}:`, error)
+  } catch {
+    // Silent fail
     return null
   }
 }
@@ -78,36 +91,43 @@ export async function getUnifiedQuote(
   assetType: "stock" | "crypto",
   currency: "BRL" | "USD" = "BRL",
 ): Promise<UnifiedQuote | null> {
-  console.log(`[v0] Fetching unified quote for ${ticker} (${assetType}) in ${currency}`)
+  const cacheKey = `${ticker}-${assetType}-${currency}`
+  const cached = quoteCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data
+  }
+
+  let result: UnifiedQuote | null = null
 
   if (assetType === "crypto") {
-    const cryptoQuote = await getCryptoCotacao(ticker, currency)
-    if (cryptoQuote) {
-      console.log(`[v0] Crypto quote found: ${cryptoQuote.regularMarketPrice} ${currency}`)
-      return {
-        symbol: ticker.toUpperCase(),
-        name: cryptoQuote.coinName,
-        price: cryptoQuote.regularMarketPrice,
-        change: cryptoQuote.regularMarketChange,
-        changePercent: cryptoQuote.regularMarketChangePercent,
-        currency: currency,
-        source: "brapi",
+    const geckoQuote = await fetchFromCoinGecko(ticker, currency)
+    if (geckoQuote) {
+      result = geckoQuote
+    } else {
+      // Fallback to Brapi only if CoinGecko fails
+      const cryptoQuote = await getCryptoCotacao(ticker, currency)
+      if (cryptoQuote) {
+        result = {
+          symbol: ticker.toUpperCase(),
+          name: cryptoQuote.coinName,
+          price: cryptoQuote.regularMarketPrice,
+          change: cryptoQuote.regularMarketChange,
+          changePercent: cryptoQuote.regularMarketChangePercent,
+          currency: currency,
+          source: "brapi",
+        }
       }
     }
 
-    console.log(`[v0] Trying CoinGecko as fallback for ${ticker}`)
-    const geckoQuote = await fetchFromCoinGecko(ticker, currency)
-    if (geckoQuote) return geckoQuote
-
-    console.error(`[v0] No crypto quote found for ${ticker} from any source`)
-    return null
+    if (result) {
+      quoteCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    }
+    return result
   }
 
+  // For stocks
   const brapiQuote = await getBrapiCotacao(ticker)
   if (brapiQuote) {
-    console.log(`[v0] Brapi quote found: ${brapiQuote.regularMarketPrice} ${brapiQuote.currency}`)
-
-    // Se o ativo está em USD mas o usuário quer BRL, converter
     let price = brapiQuote.regularMarketPrice
     let change = brapiQuote.regularMarketChange
     let resultCurrency = brapiQuote.currency
@@ -117,10 +137,9 @@ export async function getUnifiedQuote(
       price = brapiQuote.regularMarketPrice * usdToBrl
       change = brapiQuote.regularMarketChange * usdToBrl
       resultCurrency = "BRL"
-      console.log(`[v0] Converted stock from USD to BRL: ${brapiQuote.regularMarketPrice} -> ${price}`)
     }
 
-    return {
+    result = {
       symbol: brapiQuote.symbol,
       name: brapiQuote.shortName,
       price,
@@ -131,37 +150,43 @@ export async function getUnifiedQuote(
     }
   }
 
-  console.log(`[v0] Brapi failed, trying US stock APIs for ${ticker}`)
-  const usStockQuote = await getUSStockQuote(ticker)
-  if (usStockQuote) {
-    // Converter para BRL se necessário
-    if (currency === "BRL" && usStockQuote.currency === "USD") {
-      const usdToBrl = await getUSDtoBRL()
-      return {
-        symbol: usStockQuote.symbol,
-        name: usStockQuote.name,
-        price: usStockQuote.price * usdToBrl,
-        change: usStockQuote.change * usdToBrl,
-        changePercent: usStockQuote.changePercent,
-        currency: "BRL",
-        source: usStockQuote.source,
+  if (!result) {
+    const usStockQuote = await getUSStockQuote(ticker)
+    if (usStockQuote) {
+      if (currency === "BRL" && usStockQuote.currency === "USD") {
+        const usdToBrl = await getUSDtoBRL()
+        result = {
+          symbol: usStockQuote.symbol,
+          name: usStockQuote.name,
+          price: usStockQuote.price * usdToBrl,
+          change: usStockQuote.change * usdToBrl,
+          changePercent: usStockQuote.changePercent,
+          currency: "BRL",
+          source: usStockQuote.source,
+        }
+      } else {
+        result = {
+          symbol: usStockQuote.symbol,
+          name: usStockQuote.name,
+          price: usStockQuote.price,
+          change: usStockQuote.change,
+          changePercent: usStockQuote.changePercent,
+          currency: usStockQuote.currency,
+          source: usStockQuote.source,
+        }
       }
-    }
-
-    return {
-      symbol: usStockQuote.symbol,
-      name: usStockQuote.name,
-      price: usStockQuote.price,
-      change: usStockQuote.change,
-      changePercent: usStockQuote.changePercent,
-      currency: usStockQuote.currency,
-      source: usStockQuote.source,
     }
   }
 
-  console.error(`[v0] No quote found for ${ticker} from any source`)
-  return null
+  if (result) {
+    quoteCache.set(cacheKey, { data: result, timestamp: Date.now() })
+  }
+
+  return result
 }
+
+const historicalCache = new Map<string, { price: number; timestamp: number }>()
+const HISTORICAL_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 export async function getHistoricalPrice(
   ticker: string,
@@ -169,23 +194,33 @@ export async function getHistoricalPrice(
   assetType: "stock" | "crypto",
   currency: "BRL" | "USD" = "BRL",
 ): Promise<number | null> {
-  console.log(`[v0] Fetching historical price for ${ticker} on ${date} (${assetType})`)
+  const cacheKey = `hist-${ticker}-${date}-${assetType}-${currency}`
+  const cached = historicalCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < HISTORICAL_CACHE_TTL) {
+    return cached.price
+  }
+
+  let result: number | null = null
 
   if (assetType === "crypto") {
     const cryptoPrice = await getCryptoHistorica(ticker, date, currency)
-    if (cryptoPrice) return cryptoPrice
+    if (cryptoPrice) result = cryptoPrice
   } else {
     const stockPrice = await getBrapiHistorica(ticker, date)
-    if (stockPrice) return stockPrice
+    if (stockPrice) result = stockPrice
   }
 
   // If historical price not available, try current price
-  console.log(`[v0] Historical price not found, trying current price`)
-  const currentQuote = await getUnifiedQuote(ticker, assetType, currency)
-  if (currentQuote) {
-    console.log(`[v0] Using current price as fallback: ${currentQuote.price}`)
-    return currentQuote.price
+  if (!result) {
+    const currentQuote = await getUnifiedQuote(ticker, assetType, currency)
+    if (currentQuote) {
+      result = currentQuote.price
+    }
   }
 
-  return null
+  if (result) {
+    historicalCache.set(cacheKey, { price: result, timestamp: Date.now() })
+  }
+
+  return result
 }

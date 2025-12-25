@@ -6,6 +6,9 @@ const ALPHA_VANTAGE_KEY = process.env.ALPHA_VANTAGE_KEY || ""
 const TWELVE_DATA_KEY = process.env.TWELVE_DATA_KEY || ""
 const BRAPI_TOKEN = process.env.BRAPI_TOKEN || ""
 
+const stockCache = new Map<string, { data: USStockQuote; timestamp: number }>()
+const CACHE_TTL = 60 * 1000 // 1 minute
+
 export interface USStockQuote {
   symbol: string
   name: string
@@ -25,7 +28,6 @@ async function fetchFromFinnhub(symbol: string): Promise<USStockQuote | null> {
   if (!FINNHUB_API_KEY) return null
 
   try {
-    console.log(`[v0] Trying Finnhub for ${symbol}`)
     const url = `https://finnhub.io/api/v1/quote?symbol=${symbol}&token=${FINNHUB_API_KEY}`
 
     const response = await fetch(url, {
@@ -39,29 +41,21 @@ async function fetchFromFinnhub(symbol: string): Promise<USStockQuote | null> {
 
     if (!data.c || data.c === 0) return null
 
-    const price = data.c // current price
-    const previousClose = data.pc
-    const change = data.d
-    const changePercent = data.dp
-
-    console.log(`[v0] Finnhub success: ${symbol} = $${price}`)
-
     return {
       symbol: symbol.toUpperCase(),
       name: symbol.toUpperCase(),
-      price,
-      change,
-      changePercent,
+      price: data.c,
+      change: data.d,
+      changePercent: data.dp,
       high: data.h,
       low: data.l,
       open: data.o,
-      previousClose,
+      previousClose: data.pc,
       volume: 0,
       currency: "USD",
       source: "finnhub",
     }
-  } catch (error) {
-    console.error(`[v0] Finnhub error for ${symbol}:`, error)
+  } catch {
     return null
   }
 }
@@ -70,7 +64,6 @@ async function fetchFromTwelveData(symbol: string): Promise<USStockQuote | null>
   if (!TWELVE_DATA_KEY) return null
 
   try {
-    console.log(`[v0] Trying Twelve Data for ${symbol}`)
     const url = `https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`
 
     const response = await fetch(url, {
@@ -84,18 +77,12 @@ async function fetchFromTwelveData(symbol: string): Promise<USStockQuote | null>
 
     if (!data.close || data.code === 429) return null
 
-    const price = Number.parseFloat(data.close)
-    const change = Number.parseFloat(data.change)
-    const changePercent = Number.parseFloat(data.percent_change)
-
-    console.log(`[v0] Twelve Data success: ${symbol} = $${price}`)
-
     return {
       symbol: data.symbol,
       name: data.name || data.symbol,
-      price,
-      change,
-      changePercent,
+      price: Number.parseFloat(data.close),
+      change: Number.parseFloat(data.change),
+      changePercent: Number.parseFloat(data.percent_change),
       high: Number.parseFloat(data.high),
       low: Number.parseFloat(data.low),
       open: Number.parseFloat(data.open),
@@ -104,8 +91,7 @@ async function fetchFromTwelveData(symbol: string): Promise<USStockQuote | null>
       currency: "USD",
       source: "twelvedata",
     }
-  } catch (error) {
-    console.error(`[v0] Twelve Data error for ${symbol}:`, error)
+  } catch {
     return null
   }
 }
@@ -114,7 +100,6 @@ async function fetchFromAlphaVantage(symbol: string): Promise<USStockQuote | nul
   if (!ALPHA_VANTAGE_KEY) return null
 
   try {
-    console.log(`[v0] Trying Alpha Vantage for ${symbol}`)
     const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_KEY}`
 
     const response = await fetch(url, {
@@ -128,8 +113,6 @@ async function fetchFromAlphaVantage(symbol: string): Promise<USStockQuote | nul
     const quote = data["Global Quote"]
 
     if (!quote || !quote["05. price"]) return null
-
-    console.log(`[v0] Alpha Vantage success: ${symbol} = $${quote["05. price"]}`)
 
     return {
       symbol: quote["01. symbol"],
@@ -145,15 +128,15 @@ async function fetchFromAlphaVantage(symbol: string): Promise<USStockQuote | nul
       currency: "USD",
       source: "alphavantage",
     }
-  } catch (error) {
-    console.error(`[v0] Alpha Vantage error for ${symbol}:`, error)
+  } catch {
     return null
   }
 }
 
 async function fetchFromBrapi(symbol: string): Promise<USStockQuote | null> {
+  if (!BRAPI_TOKEN) return null
+
   try {
-    console.log(`[v0] Trying Brapi for US stock ${symbol}`)
     const url = `https://brapi.dev/api/quote/${symbol}`
 
     const response = await fetch(url, {
@@ -173,8 +156,6 @@ async function fetchFromBrapi(symbol: string): Promise<USStockQuote | null> {
 
     const result = data.results[0]
 
-    console.log(`[v0] Brapi success: ${symbol} = ${result.regularMarketPrice}`)
-
     return {
       symbol: result.symbol,
       name: result.shortName || result.symbol,
@@ -189,33 +170,28 @@ async function fetchFromBrapi(symbol: string): Promise<USStockQuote | null> {
       currency: result.currency || "USD",
       source: "brapi",
     }
-  } catch (error) {
-    console.error(`[v0] Brapi error for ${symbol}:`, error)
+  } catch {
     return null
   }
 }
 
 export async function getUSStockQuote(symbol: string): Promise<USStockQuote | null> {
-  console.log(`[v0] Fetching US stock quote for ${symbol}`)
+  const cached = stockCache.get(symbol)
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data
+  }
 
-  // Tenta Finnhub primeiro (mais rápido e maior limite)
+  // Try all sources in order
   let quote = await fetchFromFinnhub(symbol)
-  if (quote) return quote
+  if (!quote) quote = await fetchFromTwelveData(symbol)
+  if (!quote) quote = await fetchFromBrapi(symbol)
+  if (!quote) quote = await fetchFromAlphaVantage(symbol)
 
-  // Tenta Twelve Data
-  quote = await fetchFromTwelveData(symbol)
-  if (quote) return quote
+  if (quote) {
+    stockCache.set(symbol, { data: quote, timestamp: Date.now() })
+  }
 
-  // Tenta Brapi
-  quote = await fetchFromBrapi(symbol)
-  if (quote) return quote
-
-  // Tenta Alpha Vantage como último recurso
-  quote = await fetchFromAlphaVantage(symbol)
-  if (quote) return quote
-
-  console.error(`[v0] Failed to fetch ${symbol} from all US stock APIs`)
-  return null
+  return quote
 }
 
 export async function searchUSStocks(query: string): Promise<{ symbol: string; name: string; type: string }[]> {
@@ -233,6 +209,10 @@ export async function searchUSStocks(query: string): Promise<{ symbol: string; n
     { symbol: "GOOGL", name: "Alphabet Inc.", type: "Stock" },
     { symbol: "AMZN", name: "Amazon.com Inc.", type: "Stock" },
     { symbol: "TSLA", name: "Tesla Inc.", type: "Stock" },
+    { symbol: "NVDA", name: "NVIDIA Corporation", type: "Stock" },
+    { symbol: "META", name: "Meta Platforms Inc.", type: "Stock" },
+    { symbol: "NFLX", name: "Netflix Inc.", type: "Stock" },
+    { symbol: "NKE", name: "Nike Inc.", type: "Stock" },
     { symbol: "O", name: "Realty Income Corporation", type: "REIT" },
     { symbol: "PLD", name: "Prologis Inc.", type: "REIT" },
     { symbol: "AMT", name: "American Tower Corporation", type: "REIT" },
