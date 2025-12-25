@@ -22,7 +22,7 @@ import type { RendaVariavel } from "@/lib/types"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
-import { AssetDetailDialog } from "./asset-detail-dialog"
+import { AssetDetailModal } from "./asset-detail-modal"
 
 interface RendaVariavelListProps {
   ativos: RendaVariavel[]
@@ -188,7 +188,7 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
         </Card>
       </motion.div>
 
-      {selectedAtivo && <AssetDetailDialog ativo={selectedAtivo} open={isDetailOpen} onOpenChange={setIsDetailOpen} />}
+      {selectedAtivo && <AssetDetailModal ativo={selectedAtivo} open={isDetailOpen} onOpenChange={setIsDetailOpen} />}
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent className="glass-card border-primary/20">
