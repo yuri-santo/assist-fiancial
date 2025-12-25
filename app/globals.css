@@ -156,7 +156,7 @@
   }
 
   .glass-card {
-    @apply bg-card/60 backdrop-blur-xl border border-border/30 relative overflow-hidden;
+    @apply bg-card/60 backdrop-blur-xl border border-border/30 overflow-hidden;
   }
 
   .neon-glow {

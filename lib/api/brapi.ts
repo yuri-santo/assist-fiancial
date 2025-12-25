@@ -364,6 +364,7 @@ export const TIPOS_RENDA_VARIAVEL = {
 export const MOEDAS = {
   BRL: { label: "Real (R$)", symbol: "R$" },
   USD: { label: "Dólar (US$)", symbol: "US$" },
+  USDT: { label: "Tether (USDT)", symbol: "USDT" },
   EUR: { label: "Euro (€)", symbol: "€" },
 } as const
 

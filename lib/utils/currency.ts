@@ -1,10 +1,10 @@
-export function formatCurrency(value: number): string {
+export function formatCurrency(value: number, currency: "BRL" | "USD" | "USDT" | "EUR" = "BRL"): string {
+  const resolved = currency === "USDT" ? "USD" : currency
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
-    currency: "BRL",
+    currency: resolved,
   }).format(value)
 }
-
 export function parseCurrency(value: string): number {
   return Number.parseFloat(value.replace(/[^\d,-]/g, "").replace(",", ".")) || 0
 }

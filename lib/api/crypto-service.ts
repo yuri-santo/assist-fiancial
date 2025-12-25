@@ -20,6 +20,70 @@ export interface CryptoQuote {
   marketCap: number
 }
 
+
+// Fallback via CoinGecko (sem API key)
+const COINGECKO_BASE_URL = "https://api.coingecko.com/api/v3"
+
+const COINGECKO_ID_MAP: Record<string, string> = {
+  BTC: "bitcoin",
+  ETH: "ethereum",
+  BNB: "binancecoin",
+  XRP: "ripple",
+  ADA: "cardano",
+  DOGE: "dogecoin",
+  SOL: "solana",
+  DOT: "polkadot",
+  MATIC: "matic-network",
+  LTC: "litecoin",
+  SHIB: "shiba-inu",
+  AVAX: "avalanche-2",
+  UNI: "uniswap",
+  LINK: "chainlink",
+}
+
+function resolveCoinGeckoId(coin: string): string {
+  const clean = coin.replace(/-USD|-BRL|-USDT/gi, "").toUpperCase()
+  return COINGECKO_ID_MAP[clean] || clean.toLowerCase()
+}
+
+async function fetchCoinGeckoCurrent(coin: string, currency: "BRL" | "USD" | "USDT"): Promise<number | null> {
+  try {
+    const id = resolveCoinGeckoId(coin)
+    const vs = currency === "USDT" ? "usd" : currency.toLowerCase()
+    const url = `${COINGECKO_BASE_URL}/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=${encodeURIComponent(vs)}`
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    if (!response.ok) return null
+    const data = await response.json()
+    const price = data?.[id]?.[vs]
+    return typeof price === "number" ? price : null
+  } catch {
+    return null
+  }
+}
+
+async function fetchCoinGeckoHistorical(coin: string, dateISO: string, currency: "BRL" | "USD" | "USDT"): Promise<number | null> {
+  try {
+    const id = resolveCoinGeckoId(coin)
+    const dt = new Date(dateISO)
+    if (Number.isNaN(dt.getTime())) return null
+
+    // CoinGecko espera DD-MM-YYYY
+    const dd = String(dt.getUTCDate()).padStart(2, "0")
+    const mm = String(dt.getUTCMonth() + 1).padStart(2, "0")
+    const yyyy = String(dt.getUTCFullYear())
+    const dateParam = `${dd}-${mm}-${yyyy}`
+
+    const vs = currency === "USDT" ? "usd" : currency.toLowerCase()
+    const url = `${COINGECKO_BASE_URL}/coins/${encodeURIComponent(id)}/history?date=${encodeURIComponent(dateParam)}&localization=false`
+    const response = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    if (!response.ok) return null
+    const data = await response.json()
+    const price = data?.market_data?.current_price?.[vs]
+    return typeof price === "number" ? price : null
+  } catch {
+    return null
+  }
+}
 export interface CryptoResponse {
   coins: CryptoQuote[]
   availableCoins: string[]
@@ -55,10 +119,34 @@ export async function getUSDtoBRL(): Promise<number> {
   return 5.8
 }
 
-export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "BRL"): Promise<CryptoQuote | null> {
+export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" | "USDT" = "BRL"): Promise<CryptoQuote | null> {
+  // Se não houver token do Brapi, usa CoinGecko diretamente
+  if (!BRAPI_TOKEN) {
+    const price = await fetchCoinGeckoCurrent(coin, currency)
+    if (price != null) {
+      return {
+        coin: coin.toUpperCase().replace(/-USD|-BRL|-USDT/gi, ""),
+        coinName: coin.toUpperCase(),
+        currency: currency === "USDT" ? "USDT" : currency,
+        currencyRateFromUSD: 1,
+        regularMarketPrice: price,
+        regularMarketDayHigh: price,
+        regularMarketDayLow: price,
+        regularMarketDayRange: "",
+        regularMarketChange: 0,
+        regularMarketChangePercent: 0,
+        regularMarketPreviousClose: price,
+        regularMarketVolume: 0,
+        marketCap: 0,
+        circulatingSupply: 0,
+        regularMarketTime: new Date().toISOString(),
+      }
+    }
+    return null
+  }
   try {
     // Remove any suffix like -USD or -BRL
-    const cleanCoin = coin.replace(/-USD|-BRL/gi, "").toUpperCase()
+    const cleanCoin = coin.replace(/-USD|-BRL|-USDT/gi, "").toUpperCase()
 
     const url = `${BRAPI_BASE_URL}/v2/crypto?coin=${cleanCoin}&currency=USD`
 
@@ -110,6 +198,11 @@ export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "
       }
     }
 
+    if (currency === "USDT") {
+      console.log(`[v0] Got crypto quote for ${cleanCoin}: ${cryptoData.regularMarketPrice} USDT (via USD)`)
+      return { ...cryptoData, currency: "USDT" }
+    }
+
     console.log(`[v0] Got crypto quote for ${cleanCoin}: ${cryptoData.regularMarketPrice} USD`)
     return cryptoData
   } catch (error) {
@@ -157,36 +250,33 @@ export async function searchCryptos(query: string): Promise<{ symbol: string; na
 export async function getCryptoHistorica(
   coin: string,
   date: string,
-  currency: "BRL" | "USD" = "BRL",
+  currency: "BRL" | "USD" | "USDT" = "BRL",
 ): Promise<number | null> {
   try {
     console.log(`[v0] Fetching historical crypto price for ${coin} on ${date} in ${currency}`)
 
-    // For crypto, if date is recent (within 7 days), use current price
+    // Se a data for muito recente, a melhor aproximação é a cotação atual (evita lacunas de fechamento)
     const targetDate = new Date(date)
-    const now = new Date()
-    const daysDiff = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24))
-
-    if (daysDiff <= 7) {
-      const currentQuote = await getCryptoCotacao(coin, currency)
-      if (currentQuote) {
-        console.log(`[v0] Using current price for recent date: ${currentQuote.regularMarketPrice} ${currency}`)
-        return currentQuote.regularMarketPrice
+    if (!Number.isNaN(targetDate.getTime())) {
+      const now = new Date()
+      const daysDiff = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24))
+      if (daysDiff <= 1) {
+        const currentQuote = await getCryptoCotacao(coin, currency)
+        if (currentQuote) return currentQuote.regularMarketPrice
       }
     }
 
-    // For older dates, Brapi doesn't provide historical crypto data
-    // Try current price as fallback
-    console.log(`[v0] Historical crypto data not available, trying current price`)
+    // Histórico por dia via CoinGecko (DD-MM-YYYY)
+    const historical = await fetchCoinGeckoHistorical(coin, date, currency)
+    if (historical != null) return historical
+
+    // Fallback: cotação atual
     const currentQuote = await getCryptoCotacao(coin, currency)
-    if (currentQuote) {
-      console.log(`[v0] Using current price as fallback: ${currentQuote.regularMarketPrice} ${currency}`)
-      return currentQuote.regularMarketPrice
-    }
+    if (currentQuote) return currentQuote.regularMarketPrice
 
     return null
   } catch (error) {
-    console.error(`[v0] Error fetching historical crypto price:`, error)
+    console.error(`[v0] Error fetching historical crypto price for ${coin}:`, error)
     return null
   }
 }
