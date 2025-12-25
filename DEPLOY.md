@@ -35,19 +35,35 @@ Este projeto foi atualizado para corrigir a vulnerabilidade CVE-2025-55182 (Reac
 4. Selecione a regiao mais proxima (South America para BR)
 5. Aguarde a criacao do projeto (~2 minutos)
 
-### 1.2 Executar Script do Banco de Dados
+### 1.2 Executar Scripts do Banco de Dados
+
+**IMPORTANTE:** Execute os scripts na ordem correta!
 
 1. No dashboard do Supabase, va em **SQL Editor**
 2. Clique em **New Query**
-3. Copie TODO o conteudo do arquivo `scripts/000_FULL_DATABASE_SETUP.sql`
-4. Cole no editor e clique em **Run**
-5. Aguarde a execucao (deve mostrar "Success")
+3. Execute os scripts na seguinte ordem:
 
-**IMPORTANTE:** Este script cria:
-- Todas as tabelas (despesas, receitas, cartoes, investimentos, etc.)
-- Politicas de seguranca RLS (Row Level Security)
-- Triggers para criar perfil e categorias automaticamente
-- Tabelas de renda variavel e renda fixa
+#### Script 1: Tabelas Principais
+```
+scripts/000_FULL_DATABASE_SETUP.sql
+```
+
+#### Script 2: Tabelas de Investimentos
+```
+scripts/005_investments_tables.sql
+```
+
+#### Script 3: Campos Adicionais de Investimentos
+```
+scripts/007_add_investment_fields.sql
+```
+
+#### Script 4: Tabela de Notificacoes
+```
+scripts/008_create_notificacoes.sql
+```
+
+**Copie TODO o conteudo de cada arquivo, cole no editor e clique em "Run".**
 
 ### 1.3 Executar Script de Investimentos
 
@@ -253,17 +269,18 @@ Apos o deploy, verifique:
 - Verifique os logs do servidor
 - Confirme que o build foi bem sucedido
 
-### Cotacoes nao carregam
-- A API Brapi e gratuita mas tem limite de requests
-- Verifique se nao ha erro de rede
+### Erro 404 em /rest/v1/notificacoes
+- Execute o script `scripts/008_create_notificacoes.sql` no SQL Editor do Supabase
+- Este script cria a tabela de notificacoes que estava faltando
 
-### Graficos nao aparecem
-- Verifique se ha dados no banco
-- Abra o console do navegador para ver erros
+### Modal nao aparece ou aparece cortado
+- Verifique se o z-index esta correto (z-50)
+- O modal foi configurado para aparecer no topo (top-[10%])
+- Se ainda houver problemas, limpe o cache do navegador
 
-### Animacoes nao funcionam
-- Verifique se o JavaScript esta habilitado
-- Usuarios com `prefers-reduced-motion` terao animacoes desabilitadas
+### Warnings de acessibilidade (form fields sem id)
+- Os componentes foram atualizados com useId() para gerar IDs unicos
+- Faca redeploy apos atualizar o codigo
 
 ---
 
