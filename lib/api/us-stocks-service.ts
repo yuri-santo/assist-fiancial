@@ -175,17 +175,59 @@ async function fetchFromBrapi(symbol: string): Promise<USStockQuote | null> {
   }
 }
 
+async function fetchFromYahooViaAPI(symbol: string): Promise<USStockQuote | null> {
+  try {
+    // Detect if running on server or client
+    const isServer = typeof window === "undefined"
+
+    let baseUrl = ""
+    if (isServer) {
+      // On server, use environment variable or default
+      baseUrl =
+        process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "http://localhost:3000"
+    }
+
+    const url = `${baseUrl}/api/stocks/quote?symbol=${symbol}`
+
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (!response.ok) return null
+
+    const data = await response.json()
+
+    if (!data.price) return null
+
+    return {
+      symbol: data.symbol,
+      name: data.name || data.symbol,
+      price: data.price,
+      change: data.change || 0,
+      changePercent: data.changePercent || 0,
+      high: data.high || data.price,
+      low: data.low || data.price,
+      open: data.open || data.price,
+      previousClose: data.previousClose || data.price,
+      volume: data.volume || 0,
+      currency: data.currency || "USD",
+      source: "yahoo",
+    }
+  } catch {
+    return null
+  }
+}
+
 export async function getUSStockQuote(symbol: string): Promise<USStockQuote | null> {
   const cached = stockCache.get(symbol)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data
   }
 
-  // Try all sources in order
-  let quote = await fetchFromFinnhub(symbol)
-  if (!quote) quote = await fetchFromTwelveData(symbol)
-  if (!quote) quote = await fetchFromBrapi(symbol)
-  if (!quote) quote = await fetchFromAlphaVantage(symbol)
+  const quote = await fetchFromYahooViaAPI(symbol)
 
   if (quote) {
     stockCache.set(symbol, { data: quote, timestamp: Date.now() })
@@ -194,8 +236,36 @@ export async function getUSStockQuote(symbol: string): Promise<USStockQuote | nu
   return quote
 }
 
+export async function getUSStockHistoricalPrice(symbol: string, date: string): Promise<number | null> {
+  try {
+    const isServer = typeof window === "undefined"
+
+    let baseUrl = ""
+    if (isServer) {
+      baseUrl =
+        process.env.NEXT_PUBLIC_APP_URL || process.env.VERCEL_URL
+          ? `https://${process.env.VERCEL_URL}`
+          : "http://localhost:3000"
+    }
+
+    const url = `${baseUrl}/api/stocks/historical?symbol=${symbol}&date=${date}`
+
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(8000),
+    })
+
+    if (!response.ok) return null
+
+    const data = await response.json()
+    return data.price || null
+  } catch {
+    return null
+  }
+}
+
 export async function searchUSStocks(query: string): Promise<{ symbol: string; name: string; type: string }[]> {
-  // Lista estática de ETFs e REITs populares
+  // Lista estática de ETFs, Stocks e REITs populares
   const popularAssets = [
     { symbol: "SPY", name: "SPDR S&P 500 ETF Trust", type: "ETF" },
     { symbol: "VOO", name: "Vanguard S&P 500 ETF", type: "ETF" },
@@ -213,11 +283,21 @@ export async function searchUSStocks(query: string): Promise<{ symbol: string; n
     { symbol: "META", name: "Meta Platforms Inc.", type: "Stock" },
     { symbol: "NFLX", name: "Netflix Inc.", type: "Stock" },
     { symbol: "NKE", name: "Nike Inc.", type: "Stock" },
+    { symbol: "DIS", name: "Walt Disney Company", type: "Stock" },
+    { symbol: "JPM", name: "JPMorgan Chase & Co.", type: "Stock" },
+    { symbol: "V", name: "Visa Inc.", type: "Stock" },
+    { symbol: "MA", name: "Mastercard Inc.", type: "Stock" },
+    { symbol: "JNJ", name: "Johnson & Johnson", type: "Stock" },
+    { symbol: "PG", name: "Procter & Gamble", type: "Stock" },
+    { symbol: "KO", name: "Coca-Cola Company", type: "Stock" },
+    { symbol: "PEP", name: "PepsiCo Inc.", type: "Stock" },
+    { symbol: "WMT", name: "Walmart Inc.", type: "Stock" },
     { symbol: "O", name: "Realty Income Corporation", type: "REIT" },
     { symbol: "PLD", name: "Prologis Inc.", type: "REIT" },
     { symbol: "AMT", name: "American Tower Corporation", type: "REIT" },
     { symbol: "EQIX", name: "Equinix Inc.", type: "REIT" },
     { symbol: "PSA", name: "Public Storage", type: "REIT" },
+    { symbol: "SPG", name: "Simon Property Group", type: "REIT" },
   ]
 
   const filtered = popularAssets.filter(

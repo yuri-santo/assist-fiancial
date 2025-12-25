@@ -1,9 +1,8 @@
 // Serviço unificado com fallback entre múltiplas APIs
-// Ordem de prioridade: CoinGecko (crypto) -> Brapi -> US Stocks APIs
 
 import { getCotacao as getBrapiCotacao, getCotacaoHistorica as getBrapiHistorica } from "./brapi"
 import { getCryptoCotacao, getCryptoHistorica, getUSDtoBRL } from "./crypto-service"
-import { getUSStockQuote } from "./us-stocks-service"
+import { getUSStockQuote, getUSStockHistoricalPrice } from "./us-stocks-service"
 
 const COINGECKO_API = "https://api.coingecko.com/api/v3"
 
@@ -22,7 +21,6 @@ export interface UnifiedQuote {
 
 async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Promise<UnifiedQuote | null> {
   try {
-    // Map common crypto tickers to CoinGecko IDs
     const coinIdMap: Record<string, string> = {
       BTC: "bitcoin",
       ETH: "ethereum",
@@ -48,9 +46,8 @@ async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Prom
 
     const coinId = coinIdMap[ticker.toUpperCase()] || ticker.toLowerCase()
 
-    // Check if it's a valid crypto ticker
     if (!coinIdMap[ticker.toUpperCase()] && ticker.length > 5) {
-      return null // Likely not a crypto
+      return null
     }
 
     const vsCurrency = currency.toLowerCase()
@@ -81,7 +78,6 @@ async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Prom
       source: "coingecko",
     }
   } catch {
-    // Silent fail
     return null
   }
 }
@@ -104,7 +100,6 @@ export async function getUnifiedQuote(
     if (geckoQuote) {
       result = geckoQuote
     } else {
-      // Fallback to Brapi only if CoinGecko fails
       const cryptoQuote = await getCryptoCotacao(ticker, currency)
       if (cryptoQuote) {
         result = {
@@ -125,7 +120,7 @@ export async function getUnifiedQuote(
     return result
   }
 
-  // For stocks
+  // For stocks - try Brapi first (Brazilian stocks), then US stocks API
   const brapiQuote = await getBrapiCotacao(ticker)
   if (brapiQuote) {
     let price = brapiQuote.regularMarketPrice
@@ -162,7 +157,7 @@ export async function getUnifiedQuote(
           change: usStockQuote.change * usdToBrl,
           changePercent: usStockQuote.changePercent,
           currency: "BRL",
-          source: usStockQuote.source,
+          source: "yahoo",
         }
       } else {
         result = {
@@ -172,7 +167,7 @@ export async function getUnifiedQuote(
           change: usStockQuote.change,
           changePercent: usStockQuote.changePercent,
           currency: usStockQuote.currency,
-          source: usStockQuote.source,
+          source: "yahoo",
         }
       }
     }
@@ -206,8 +201,21 @@ export async function getHistoricalPrice(
     const cryptoPrice = await getCryptoHistorica(ticker, date, currency)
     if (cryptoPrice) result = cryptoPrice
   } else {
+    // Try Brapi first for Brazilian stocks
     const stockPrice = await getBrapiHistorica(ticker, date)
-    if (stockPrice) result = stockPrice
+    if (stockPrice) {
+      result = stockPrice
+    } else {
+      const usPrice = await getUSStockHistoricalPrice(ticker, date)
+      if (usPrice) {
+        if (currency === "BRL") {
+          const usdToBrl = await getUSDtoBRL()
+          result = usPrice * usdToBrl
+        } else {
+          result = usPrice
+        }
+      }
+    }
   }
 
   // If historical price not available, try current price

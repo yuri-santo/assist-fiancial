@@ -3,12 +3,13 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { TrendingUp, TrendingDown, DollarSign, BarChart3, RefreshCw } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
 import type { RendaVariavel } from "@/lib/types"
-import { getCotacoes, TIPOS_RENDA_VARIAVEL } from "@/lib/api/brapi"
+import { TIPOS_RENDA_VARIAVEL } from "@/lib/api/brapi"
 import { RendaVariavelList } from "@/components/investments/renda-variavel-list"
 import { AddRendaVariavelDialog } from "@/components/investments/add-renda-variavel-dialog"
 import { PortfolioChart } from "@/components/investments/portfolio-chart"
 import { VariacaoChart } from "@/components/investments/variacao-chart"
 import { InvestmentNews } from "@/components/investments/investment-news"
+import { getUnifiedQuote } from "@/lib/api/unified-quote-service"
 
 export default async function RendaVariavelPage() {
   const supabase = await createClient()
@@ -26,29 +27,42 @@ export default async function RendaVariavelPage() {
 
   const rendaVariavel = (ativos || []) as RendaVariavel[]
 
-  // Buscar cotações em tempo real
-  const tickers = rendaVariavel.map((a) => a.ticker)
-  const cotacoes = await getCotacoes(tickers)
-  const cotacoesMap = new Map(cotacoes.map((c) => [c.symbol, c]))
+  const ativosComCotacao = await Promise.all(
+    rendaVariavel.map(async (ativo) => {
+      const isCrypto = ativo.tipo === "cripto"
+      const isUSStock = ativo.tipo === "stock" || ativo.tipo === "reit"
+      const assetType = isCrypto ? "crypto" : "stock"
 
-  // Calcular valores atuais
-  const ativosComCotacao = rendaVariavel.map((ativo) => {
-    const cotacao = cotacoesMap.get(ativo.ticker)
-    const cotacaoAtual = cotacao?.regularMarketPrice || ativo.preco_medio
-    const valorInvestido = ativo.quantidade * ativo.preco_medio
-    const valorAtual = ativo.quantidade * cotacaoAtual
-    const lucroPrejuizo = valorAtual - valorInvestido
-    const lucroPrejuizoPercent = valorInvestido > 0 ? (lucroPrejuizo / valorInvestido) * 100 : 0
+      const currency = (ativo.moeda || "BRL") as "BRL" | "USD"
 
-    return {
-      ...ativo,
-      cotacao_atual: cotacaoAtual,
-      variacao: cotacao?.regularMarketChangePercent || 0,
-      valor_atual: valorAtual,
-      lucro_prejuizo: lucroPrejuizo,
-      lucro_prejuizo_percent: lucroPrejuizoPercent,
-    }
-  })
+      let cotacaoAtual = ativo.preco_medio
+      let variacao = 0
+
+      try {
+        const quote = await getUnifiedQuote(ativo.ticker, assetType, currency)
+        if (quote) {
+          cotacaoAtual = quote.price
+          variacao = quote.changePercent
+        }
+      } catch {
+        // Use preco_medio as fallback
+      }
+
+      const valorInvestido = ativo.quantidade * ativo.preco_medio
+      const valorAtual = ativo.quantidade * cotacaoAtual
+      const lucroPrejuizo = valorAtual - valorInvestido
+      const lucroPrejuizoPercent = valorInvestido > 0 ? (lucroPrejuizo / valorInvestido) * 100 : 0
+
+      return {
+        ...ativo,
+        cotacao_atual: cotacaoAtual,
+        variacao,
+        valor_atual: valorAtual,
+        lucro_prejuizo: lucroPrejuizo,
+        lucro_prejuizo_percent: lucroPrejuizoPercent,
+      }
+    }),
+  )
 
   // Totais
   const totalInvestido = ativosComCotacao.reduce((sum, a) => sum + a.quantidade * a.preco_medio, 0)
