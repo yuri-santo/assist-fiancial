@@ -85,23 +85,27 @@ export function AddRendaVariavelDialog() {
   }
 
   const fetchCotacao = useCallback(async () => {
-    if (!formData.ticker) return
+    if (!formData.ticker || formData.ticker.length < 2) {
+      return
+    }
 
     setIsLoadingCotacao(true)
     setApiError(null)
 
     try {
-      const ticker = formData.ticker.toUpperCase()
+      const ticker = formData.ticker.toUpperCase().trim()
       const purchaseDate = formData.data_compra
-      const useHistoricalPrice = purchaseDate && purchaseDate !== new Date().toISOString().split("T")[0]
+      const today = new Date().toISOString().split("T")[0]
+      const useHistoricalPrice = purchaseDate && purchaseDate !== today && purchaseDate < today
 
       const assetType = isCrypto ? "crypto" : "stock"
       const currency = formData.moeda as "BRL" | "USD"
 
       if (useHistoricalPrice) {
+        // Buscar preço histórico da data de compra
         const historicalPrice = await getHistoricalPrice(ticker, purchaseDate!, assetType, currency)
 
-        if (historicalPrice) {
+        if (historicalPrice && historicalPrice > 0) {
           setCotacaoAtual(historicalPrice)
           setVariacao(null)
           setFormData((prev) => ({
@@ -109,23 +113,25 @@ export function AddRendaVariavelDialog() {
             preco_medio: isCrypto ? historicalPrice.toFixed(8) : historicalPrice.toFixed(2),
           }))
         } else {
+          // Fallback para cotação atual se histórico não disponível
           const quote = await getUnifiedQuote(ticker, assetType, currency)
-          if (quote) {
+          if (quote && quote.price > 0) {
             setCotacaoAtual(quote.price)
             setVariacao(quote.changePercent)
             setFormData((prev) => ({
               ...prev,
               preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
             }))
-            setApiError("Preço histórico indisponível. Usando cotação atual.")
+            setApiError("Preço histórico indisponível para esta data. Usando cotação atual.")
           } else {
             setApiError("Não foi possível obter a cotação. Informe o preço manualmente.")
           }
         }
       } else {
+        // Buscar cotação atual
         const quote = await getUnifiedQuote(ticker, assetType, currency)
 
-        if (quote) {
+        if (quote && quote.price > 0) {
           setCotacaoAtual(quote.price)
           setVariacao(quote.changePercent)
           setFormData((prev) => ({
@@ -133,11 +139,11 @@ export function AddRendaVariavelDialog() {
             preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
           }))
         } else {
-          setApiError("Não foi possível obter a cotação de nenhuma API. Informe o preço manualmente.")
+          setApiError("Ativo não encontrado. Verifique o ticker (ex: PETR4, AAPL, NKE, BTC).")
         }
       }
     } catch {
-      setApiError("Erro ao buscar cotação. Verifique o ticker e tente novamente.")
+      setApiError("Erro ao buscar cotação. Tente novamente ou informe o preço manualmente.")
     } finally {
       setIsLoadingCotacao(false)
     }
