@@ -16,6 +16,78 @@ interface QuoteResult {
   type: "stock" | "crypto"
 }
 
+const TICKER_ALIASES: Record<string, string> = {
+  // US Stocks - Nomes populares
+  NIKE: "NKE",
+  APPLE: "AAPL",
+  MICROSOFT: "MSFT",
+  GOOGLE: "GOOGL",
+  AMAZON: "AMZN",
+  TESLA: "TSLA",
+  FACEBOOK: "META",
+  META: "META",
+  NETFLIX: "NFLX",
+  NVIDIA: "NVDA",
+  DISNEY: "DIS",
+  JPMORGAN: "JPM",
+  JP: "JPM",
+  VISA: "V",
+  MASTERCARD: "MA",
+  JOHNSON: "JNJ",
+  COCACOLA: "KO",
+  COCA: "KO",
+  PEPSI: "PEP",
+  WALMART: "WMT",
+  MCDONALDS: "MCD",
+  INTEL: "INTC",
+  AMD: "AMD",
+  PAYPAL: "PYPL",
+  UBER: "UBER",
+  ORACLE: "ORCL",
+  IBM: "IBM",
+  ADOBE: "ADBE",
+  SALESFORCE: "CRM",
+  BOEING: "BA",
+  EXXON: "XOM",
+  CHEVRON: "CVX",
+  PFIZER: "PFE",
+  BERKSHIRE: "BRK-B",
+  PROCTER: "PG",
+  GAMBLE: "PG",
+  HOMEDEPOT: "HD",
+  STARBUCKS: "SBUX",
+  SPOTIFY: "SPOT",
+  AIRBNB: "ABNB",
+  ZOOM: "ZM",
+  SNAP: "SNAP",
+  TWITTER: "TWTR",
+  X: "TWTR",
+  SQUARE: "SQ",
+  BLOCK: "SQ",
+  SHOPIFY: "SHOP",
+  ROBLOX: "RBLX",
+  COINBASE: "COIN",
+  RIVIAN: "RIVN",
+  LUCID: "LCID",
+  FORD: "F",
+  GM: "GM",
+  ATT: "T",
+  VERIZON: "VZ",
+  COMCAST: "CMCSA",
+  // Crypto aliases
+  BITCOIN: "BTC",
+  ETHEREUM: "ETH",
+  BINANCE: "BNB",
+  RIPPLE: "XRP",
+  CARDANO: "ADA",
+  DOGECOIN: "DOGE",
+  SOLANA: "SOL",
+  POLKADOT: "DOT",
+  POLYGON: "MATIC",
+  LITECOIN: "LTC",
+  SHIBAINUIB: "SHIB",
+}
+
 // Mapeamento de criptomoedas para CoinGecko
 const CRYPTO_MAP: Record<string, string> = {
   BTC: "bitcoin",
@@ -45,7 +117,6 @@ const CRYPTO_MAP: Record<string, string> = {
 // Lista de ações brasileiras conhecidas (sufixo numérico)
 const BR_STOCK_PATTERN = /^[A-Z]{4}\d{1,2}$/
 
-// Lista de ações americanas conhecidas
 const US_STOCKS = new Set([
   "AAPL",
   "MSFT",
@@ -117,7 +188,66 @@ const US_STOCKS = new Set([
   "SCHD",
   "VYM",
   "JEPI",
+  "BA",
+  "CAT",
+  "GE",
+  "MMM",
+  "HON",
+  "UPS",
+  "FDX",
+  "RTX",
+  "LMT",
+  "GS",
+  "MS",
+  "C",
+  "WFC",
+  "AXP",
+  "BLK",
+  "SCHW",
+  "USB",
+  "PNC",
+  "TFC",
+  "BK",
+  "T",
+  "VZ",
+  "CMCSA",
+  "TMUS",
+  "CHTR",
+  "SBUX",
+  "YUM",
+  "CMG",
+  "DPZ",
+  "QSR",
+  "NEM",
+  "FCX",
+  "VALE",
+  "RIO",
+  "BHP",
+  "SPOT",
+  "ABNB",
+  "ZM",
+  "SNAP",
+  "PINS",
+  "TWTR",
+  "SQ",
+  "RBLX",
+  "COIN",
+  "RIVN",
+  "LCID",
+  "F",
+  "GM",
+  "TM",
+  "HMC",
+  "BRK-A",
+  "BRK-B",
+  "BRK.A",
+  "BRK.B",
 ])
+
+function resolveAlias(symbol: string): string {
+  const upper = symbol.toUpperCase().replace(/[^A-Z0-9-]/g, "")
+  return TICKER_ALIASES[upper] || upper
+}
 
 async function fetchCrypto(symbol: string, currency: "BRL" | "USD"): Promise<QuoteResult | null> {
   const coinId = CRYPTO_MAP[symbol.toUpperCase()]
@@ -241,17 +371,14 @@ async function fetchFromBrapi(symbol: string): Promise<QuoteResult | null> {
 function detectAssetType(symbol: string): "crypto" | "br_stock" | "us_stock" | "unknown" {
   const upperSymbol = symbol.toUpperCase()
 
-  // Check if it's a known crypto
   if (CRYPTO_MAP[upperSymbol]) {
     return "crypto"
   }
 
-  // Check if it's a known US stock
   if (US_STOCKS.has(upperSymbol)) {
     return "us_stock"
   }
 
-  // Check Brazilian stock pattern (4 letters + 1-2 numbers)
   if (BR_STOCK_PATTERN.test(upperSymbol)) {
     return "br_stock"
   }
@@ -261,13 +388,16 @@ function detectAssetType(symbol: string): "crypto" | "br_stock" | "us_stock" | "
 
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url)
-  const symbol = searchParams.get("symbol")?.toUpperCase()
+  let symbol = searchParams.get("symbol")?.toUpperCase() || ""
   const forceType = searchParams.get("type") as "crypto" | "stock" | null
   const currency = (searchParams.get("currency") || "BRL") as "BRL" | "USD"
 
   if (!symbol) {
     return NextResponse.json({ error: "Symbol is required" }, { status: 400 })
   }
+
+  const originalSymbol = symbol
+  symbol = resolveAlias(symbol)
 
   let quote: QuoteResult | null = null
   const detectedType = detectAssetType(symbol)
@@ -276,6 +406,7 @@ export async function GET(request: Request) {
   if (forceType === "crypto" || detectedType === "crypto") {
     quote = await fetchCrypto(symbol, currency)
     if (quote) {
+      quote.symbol = originalSymbol // Keep original for display
       return NextResponse.json(quote)
     }
   }
@@ -296,20 +427,30 @@ export async function GET(request: Request) {
         quote = await fetchFromBrapi(symbol)
       }
     }
-    // Unknown - try all
+    // Unknown - try all sources
     else {
-      quote = await fetchFromBrapi(symbol)
+      // Try as US stock first
+      quote = await fetchFromYahoo(symbol)
       if (!quote) {
+        // Try as BR stock
         quote = await fetchFromYahoo(symbol, ".SA")
       }
       if (!quote) {
-        quote = await fetchFromYahoo(symbol)
+        quote = await fetchFromBrapi(symbol)
       }
     }
   }
 
   if (!quote) {
-    return NextResponse.json({ error: "Quote not found", symbol }, { status: 404 })
+    return NextResponse.json(
+      {
+        error: "Quote not found",
+        symbol,
+        originalSymbol,
+        suggestion: symbol !== originalSymbol ? `Tentei buscar como ${symbol}` : null,
+      },
+      { status: 404 },
+    )
   }
 
   // Convert currency if needed

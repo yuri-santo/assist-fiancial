@@ -6,6 +6,12 @@ import { getCryptoCotacao, getCryptoHistorica, getUSDtoBRL } from "./crypto-serv
 const quoteCache = new Map<string, { data: UnifiedQuote; timestamp: number }>()
 const CACHE_TTL = 60 * 1000 // 1 minute
 
+const historicalCache = new Map<string, { price: number; timestamp: number }>()
+const HISTORICAL_CACHE_TTL = 30 * 60 * 1000 // 30 minutes (historical prices don't change)
+
+const errorCache = new Map<string, number>()
+const ERROR_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
+
 export interface UnifiedQuote {
   symbol: string
   name: string
@@ -34,6 +40,12 @@ export async function getUnifiedQuote(
   currency: "BRL" | "USD" = "BRL",
 ): Promise<UnifiedQuote | null> {
   const cacheKey = `${ticker}-${assetType}-${currency}`
+
+  const errorTime = errorCache.get(cacheKey)
+  if (errorTime && Date.now() - errorTime < ERROR_CACHE_TTL) {
+    return null // Skip if recently failed
+  }
+
   const cached = quoteCache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
     return cached.data
@@ -56,6 +68,7 @@ export async function getUnifiedQuote(
       quoteCache.set(cacheKey, { data: result, timestamp: Date.now() })
       return result
     }
+    errorCache.set(cacheKey, Date.now())
     return null
   }
 
@@ -70,12 +83,14 @@ export async function getUnifiedQuote(
     })
 
     if (!response.ok) {
+      errorCache.set(cacheKey, Date.now())
       return null
     }
 
     const data = await response.json()
 
     if (!data || data.error) {
+      errorCache.set(cacheKey, Date.now())
       return null
     }
 
@@ -93,12 +108,10 @@ export async function getUnifiedQuote(
     quoteCache.set(cacheKey, { data: result, timestamp: Date.now() })
     return result
   } catch {
+    errorCache.set(cacheKey, Date.now())
     return null
   }
 }
-
-const historicalCache = new Map<string, { price: number; timestamp: number }>()
-const HISTORICAL_CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 
 export async function getHistoricalPrice(
   ticker: string,
@@ -107,9 +120,17 @@ export async function getHistoricalPrice(
   currency: "BRL" | "USD" = "BRL",
 ): Promise<number | null> {
   const cacheKey = `hist-${ticker}-${date}-${assetType}-${currency}`
+
+  // Check cache
   const cached = historicalCache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < HISTORICAL_CACHE_TTL) {
     return cached.price
+  }
+
+  // Check error cache
+  const errorTime = errorCache.get(cacheKey)
+  if (errorTime && Date.now() - errorTime < ERROR_CACHE_TTL) {
+    return null
   }
 
   let result: number | null = null
@@ -117,15 +138,39 @@ export async function getHistoricalPrice(
   if (assetType === "crypto") {
     result = await getCryptoHistorica(ticker, date, currency)
   } else {
-    // For stocks, use current price as fallback
-    const currentQuote = await getUnifiedQuote(ticker, assetType, currency)
-    if (currentQuote) {
-      result = currentQuote.price
+    // Use the new historical API route for stocks
+    try {
+      const baseUrl = getBaseUrl()
+      const url = `${baseUrl}/api/quotes/historical?symbol=${encodeURIComponent(ticker)}&date=${date}&type=stock&currency=${currency}`
+
+      const response = await fetch(url, {
+        cache: "no-store",
+        signal: AbortSignal.timeout(15000),
+      })
+
+      if (response.ok) {
+        const data = await response.json()
+        if (data && data.price) {
+          result = data.price
+        }
+      }
+    } catch {
+      // Fallback to current price
+    }
+
+    // If historical fails, fallback to current price
+    if (!result) {
+      const currentQuote = await getUnifiedQuote(ticker, assetType, currency)
+      if (currentQuote) {
+        result = currentQuote.price
+      }
     }
   }
 
   if (result) {
     historicalCache.set(cacheKey, { price: result, timestamp: Date.now() })
+  } else {
+    errorCache.set(cacheKey, Date.now())
   }
 
   return result
