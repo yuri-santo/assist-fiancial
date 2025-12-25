@@ -353,13 +353,48 @@ export async function searchAtivos(query: string): Promise<{ symbol: string; nam
 }
 
 export const TIPOS_RENDA_VARIAVEL = {
-  acao: { label: "Ação BR", color: "#3b82f6" },
-  fii: { label: "FII", color: "#10b981" },
-  etf: { label: "ETF", color: "#8b5cf6" },
-  bdr: { label: "BDR", color: "#f59e0b" },
-  stock: { label: "Stock (EUA)", color: "#ec4899" },
-  reit: { label: "REIT", color: "#14b8a6" },
-  cripto: { label: "Criptomoeda", color: "#f97316" },
+  acao: {
+    label: "Ação BR",
+    color: "#3b82f6",
+    fields: ["ticker", "quantidade", "preco_medio", "data_compra", "corretora", "setor"],
+    calcMode: "shares", // Quantidade de ações * preço
+  },
+  fii: {
+    label: "FII",
+    color: "#10b981",
+    fields: ["ticker", "quantidade", "preco_medio", "data_compra", "corretora", "setor"],
+    calcMode: "shares",
+  },
+  etf: {
+    label: "ETF",
+    color: "#8b5cf6",
+    fields: ["ticker", "quantidade", "preco_medio", "data_compra", "corretora", "setor"],
+    calcMode: "shares",
+  },
+  bdr: {
+    label: "BDR",
+    color: "#f59e0b",
+    fields: ["ticker", "quantidade", "preco_medio", "data_compra", "corretora", "setor"],
+    calcMode: "shares",
+  },
+  stock: {
+    label: "Stock (EUA)",
+    color: "#ec4899",
+    fields: ["ticker", "quantidade", "preco_medio", "data_compra", "corretora", "setor"],
+    calcMode: "shares",
+  },
+  reit: {
+    label: "REIT",
+    color: "#14b8a6",
+    fields: ["ticker", "quantidade", "preco_medio", "data_compra", "corretora", "setor"],
+    calcMode: "shares",
+  },
+  cripto: {
+    label: "Criptomoeda",
+    color: "#f97316",
+    fields: ["ticker", "valor_investido", "data_compra", "corretora"],
+    calcMode: "value", // Valor investido / preço atual = quantidade
+  },
 } as const
 
 export const MOEDAS = {
