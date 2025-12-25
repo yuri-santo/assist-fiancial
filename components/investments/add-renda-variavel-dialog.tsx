@@ -20,7 +20,7 @@ import { useRouter } from "next/navigation"
 import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, type MERCADOS, searchAtivos } from "@/lib/api/brapi"
 import { searchCryptos } from "@/lib/api/crypto-service"
 import { formatCurrency } from "@/lib/utils/currency"
-import { quoteService } from "@/lib/api/quote-service"
+import { getUnifiedQuote, getHistoricalPrice } from "@/lib/api/unified-quote-service"
 
 export function AddRendaVariavelDialog() {
   const formId = useId()
@@ -40,7 +40,7 @@ export function AddRendaVariavelDialog() {
     tipo: "acao" as keyof typeof TIPOS_RENDA_VARIAVEL,
     quantidade: "",
     preco_medio: "",
-    valor_investido: "",
+    valor_investido: "", // Novo campo para criptomoedas
     data_compra: new Date().toISOString().split("T")[0],
     corretora: "",
     setor: "",
@@ -99,8 +99,7 @@ export function AddRendaVariavelDialog() {
       const currency = formData.moeda === "BRL" ? "BRL" : "USD"
 
       if (useHistoricalPrice) {
-        console.log(`[v0] [Dialog] Fetching historical price for ${ticker} on ${purchaseDate}`)
-        const historicalPrice = await quoteService.getHistoricalPrice(ticker, purchaseDate, assetType, currency)
+        const historicalPrice = await getHistoricalPrice(ticker, purchaseDate!, assetType, currency)
 
         if (historicalPrice) {
           setCotacaoAtual(historicalPrice)
@@ -109,31 +108,38 @@ export function AddRendaVariavelDialog() {
             ...prev,
             preco_medio: isCrypto ? historicalPrice.toFixed(8) : historicalPrice.toFixed(2),
           }))
-          console.log(`[v0] [Dialog] Using historical price: ${historicalPrice}`)
-          setIsLoadingCotacao(false)
-          return
+          console.log(`[v0] Using historical price for ${purchaseDate}: ${historicalPrice}`)
+        } else {
+          const quote = await getUnifiedQuote(ticker, assetType, currency)
+          if (quote) {
+            setCotacaoAtual(quote.price)
+            setVariacao(quote.changePercent)
+            setFormData((prev) => ({
+              ...prev,
+              preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
+            }))
+            setApiError("Preço histórico indisponível. Usando cotação atual.")
+          } else {
+            setApiError("Não foi possível obter a cotação. Informe o preço manualmente.")
+          }
         }
-
-        setApiError("Preço histórico indisponível. Usando cotação atual.")
-      }
-
-      console.log(`[v0] [Dialog] Fetching current quote for ${ticker}`)
-      const quote = await quoteService.getQuote(ticker, assetType, currency)
-
-      if (quote) {
-        setCotacaoAtual(quote.price)
-        setVariacao(quote.changePercent)
-        setFormData((prev) => ({
-          ...prev,
-          preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
-        }))
-        console.log(`[v0] [Dialog] Got quote from ${quote.source}: ${quote.price} ${quote.currency}`)
-        setApiError(null)
       } else {
-        setApiError("Nenhuma API conseguiu obter a cotação. Por favor, informe o preço manualmente.")
+        const quote = await getUnifiedQuote(ticker, assetType, currency)
+
+        if (quote) {
+          setCotacaoAtual(quote.price)
+          setVariacao(quote.changePercent)
+          setFormData((prev) => ({
+            ...prev,
+            preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
+          }))
+          console.log(`[v0] Quote from ${quote.source}: ${quote.price}`)
+        } else {
+          setApiError("Não foi possível obter a cotação de nenhuma API. Informe o preço manualmente.")
+        }
       }
     } catch (error) {
-      console.error("[v0] [Dialog] Error fetching quote:", error)
+      console.error("[v0] Error fetching quote:", error)
       setApiError("Erro ao buscar cotação. Verifique o ticker e tente novamente.")
     } finally {
       setIsLoadingCotacao(false)
