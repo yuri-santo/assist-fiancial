@@ -20,50 +20,7 @@ import { useRouter } from "next/navigation"
 import { TIPOS_RENDA_VARIAVEL, SETORES, MOEDAS, type MERCADOS, searchAtivos } from "@/lib/api/brapi"
 import { searchCryptos } from "@/lib/api/crypto-service"
 import { formatCurrency } from "@/lib/utils/currency"
-
-
-type MarketAssetType = "stock" | "crypto"
-type MarketCurrency = "BRL" | "USD" | "USDT"
-
-async function fetchMarketQuote(params: {
-  ticker: string
-  assetType: MarketAssetType
-  currency: MarketCurrency
-  market?: string
-}) {
-  const sp = new URLSearchParams({
-    ticker: params.ticker,
-    assetType: params.assetType,
-    currency: params.currency,
-  })
-  if (params.market) sp.set("market", params.market)
-
-  const res = await fetch(`/api/market/quote?${sp.toString()}`, { cache: "no-store" })
-  if (!res.ok) return null
-  const data = await res.json()
-  return data?.quote ?? null
-}
-
-async function fetchMarketHistorical(params: {
-  ticker: string
-  assetType: MarketAssetType
-  currency: MarketCurrency
-  date: string
-  market?: string
-}) {
-  const sp = new URLSearchParams({
-    ticker: params.ticker,
-    assetType: params.assetType,
-    currency: params.currency,
-    date: params.date,
-  })
-  if (params.market) sp.set("market", params.market)
-
-  const res = await fetch(`/api/market/historical?${sp.toString()}`, { cache: "no-store" })
-  if (!res.ok) return null
-  const data = await res.json()
-  return data?.price ?? null
-}
+import { getUnifiedQuote, getHistoricalPrice } from "@/lib/api/unified-quote-service"
 
 export function AddRendaVariavelDialog() {
   const formId = useId()
@@ -139,10 +96,10 @@ export function AddRendaVariavelDialog() {
       const useHistoricalPrice = purchaseDate && purchaseDate !== new Date().toISOString().split("T")[0]
 
       const assetType = isCrypto ? "crypto" : "stock"
-      const currency: MarketCurrency = formData.moeda === "USDT" ? "USDT" : formData.moeda === "BRL" ? "BRL" : "USD"
+      const currency = formData.moeda === "BRL" ? "BRL" : "USD"
 
       if (useHistoricalPrice) {
-        const historicalPrice = await fetchMarketHistorical({ ticker, assetType, currency, date: purchaseDate!, market: formData.mercado })
+        const historicalPrice = await getHistoricalPrice(ticker, purchaseDate!, assetType, currency)
 
         if (historicalPrice) {
           setCotacaoAtual(historicalPrice)
@@ -153,7 +110,7 @@ export function AddRendaVariavelDialog() {
           }))
           console.log(`[v0] Using historical price for ${purchaseDate}: ${historicalPrice}`)
         } else {
-          const quote = await fetchMarketQuote({ ticker, assetType, currency, market: formData.mercado })
+          const quote = await getUnifiedQuote(ticker, assetType, currency)
           if (quote) {
             setCotacaoAtual(quote.price)
             setVariacao(quote.changePercent)
@@ -167,7 +124,7 @@ export function AddRendaVariavelDialog() {
           }
         }
       } else {
-        const quote = await fetchMarketQuote({ ticker, assetType, currency, market: formData.mercado })
+        const quote = await getUnifiedQuote(ticker, assetType, currency)
 
         if (quote) {
           setCotacaoAtual(quote.price)
