@@ -54,6 +54,9 @@ export function AssetDetailModal({ ativo, open, onOpenChange }: AssetDetailModal
   const valorInvestido = ativo.quantidade * ativo.preco_medio
   const router = useRouter()
 
+  const isCrypto = ativo.tipo?.toLowerCase() === "criptomoeda"
+  const quantityDecimals = isCrypto ? 8 : 0
+
   const [indicators, setIndicators] = useState<StockIndicators | null>(null)
   const [isLoadingIndicators, setIsLoadingIndicators] = useState(false)
   const [activeTab, setActiveTab] = useState("visao-geral")
@@ -150,8 +153,13 @@ export function AssetDetailModal({ ativo, open, onOpenChange }: AssetDetailModal
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                <p className="text-xl font-bold">{ativo.quantidade.toLocaleString("pt-BR")}</p>
-                <p className="text-xs text-muted-foreground">cotas/acoes</p>
+                <p className="text-xl font-bold">
+                  {ativo.quantidade.toLocaleString("pt-BR", {
+                    minimumFractionDigits: 0,
+                    maximumFractionDigits: quantityDecimals,
+                  })}
+                </p>
+                <p className="text-xs text-muted-foreground">{isCrypto ? "unidades" : "cotas/acoes"}</p>
               </CardContent>
             </Card>
 
