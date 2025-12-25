@@ -116,7 +116,7 @@ export interface RendaVariavel {
   data_compra: string
   corretora: string | null
   setor: string | null
-  moeda: "BRL" | "USD" | "USDT" | "EUR"
+  moeda: "BRL" | "USD" | "EUR"
   mercado: "b3" | "nyse" | "nasdaq" | "crypto"
   observacoes: string | null
   created_at: string

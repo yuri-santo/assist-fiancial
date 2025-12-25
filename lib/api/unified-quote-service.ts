@@ -76,7 +76,7 @@ async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Prom
 export async function getUnifiedQuote(
   ticker: string,
   assetType: "stock" | "crypto",
-  currency: "BRL" | "USD" | "USDT" = "BRL",
+  currency: "BRL" | "USD" = "BRL",
 ): Promise<UnifiedQuote | null> {
   console.log(`[v0] Fetching unified quote for ${ticker} (${assetType}) in ${currency}`)
 
@@ -167,7 +167,7 @@ export async function getHistoricalPrice(
   ticker: string,
   date: string,
   assetType: "stock" | "crypto",
-  currency: "BRL" | "USD" | "USDT" = "BRL",
+  currency: "BRL" | "USD" = "BRL",
 ): Promise<number | null> {
   console.log(`[v0] Fetching historical price for ${ticker} on ${date} (${assetType})`)
 
