@@ -40,7 +40,7 @@ export function AddRendaVariavelDialog() {
     tipo: "acao" as keyof typeof TIPOS_RENDA_VARIAVEL,
     quantidade: "",
     preco_medio: "",
-    valor_investido: "", // Novo campo para criptomoedas
+    valor_investido: "",
     data_compra: new Date().toISOString().split("T")[0],
     corretora: "",
     setor: "",
@@ -96,7 +96,7 @@ export function AddRendaVariavelDialog() {
       const useHistoricalPrice = purchaseDate && purchaseDate !== new Date().toISOString().split("T")[0]
 
       const assetType = isCrypto ? "crypto" : "stock"
-      const currency = formData.moeda === "BRL" ? "BRL" : "USD"
+      const currency = formData.moeda as "BRL" | "USD"
 
       if (useHistoricalPrice) {
         const historicalPrice = await getHistoricalPrice(ticker, purchaseDate!, assetType, currency)
@@ -108,7 +108,6 @@ export function AddRendaVariavelDialog() {
             ...prev,
             preco_medio: isCrypto ? historicalPrice.toFixed(8) : historicalPrice.toFixed(2),
           }))
-          console.log(`[v0] Using historical price for ${purchaseDate}: ${historicalPrice}`)
         } else {
           const quote = await getUnifiedQuote(ticker, assetType, currency)
           if (quote) {
@@ -133,13 +132,11 @@ export function AddRendaVariavelDialog() {
             ...prev,
             preco_medio: isCrypto ? quote.price.toFixed(8) : quote.price.toFixed(2),
           }))
-          console.log(`[v0] Quote from ${quote.source}: ${quote.price}`)
         } else {
           setApiError("Não foi possível obter a cotação de nenhuma API. Informe o preço manualmente.")
         }
       }
-    } catch (error) {
-      console.error("[v0] Error fetching quote:", error)
+    } catch {
       setApiError("Erro ao buscar cotação. Verifique o ticker e tente novamente.")
     } finally {
       setIsLoadingCotacao(false)
