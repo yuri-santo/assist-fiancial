@@ -122,9 +122,9 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
                         <TableCell className="text-right">
                           {ativo.tipo === "cripto" ? Number(ativo.quantidade).toFixed(8) : ativo.quantidade}
                         </TableCell>
-                        <TableCell className="text-right">{formatCurrency(ativo.preco_medio)}</TableCell>
+                        <TableCell className="text-right">{formatCurrency(ativo.preco_medio, ativo.moeda)}</TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(ativo.cotacao_atual || ativo.preco_medio)}
+                          {formatCurrency(ativo.cotacao_atual || ativo.preco_medio, ativo.moeda)}
                         </TableCell>
                         <TableCell className="text-right">
                           <span
@@ -140,13 +140,13 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
                           </span>
                         </TableCell>
                         <TableCell className="text-right font-medium">
-                          {formatCurrency(ativo.valor_atual || 0)}
+                          {formatCurrency(ativo.valor_atual || 0, ativo.moeda)}
                         </TableCell>
                         <TableCell className="text-right">
                           <div className={isPositive ? "text-emerald-400" : "text-red-400"}>
                             <span className="font-medium">
                               {isPositive ? "+" : ""}
-                              {formatCurrency(ativo.lucro_prejuizo || 0)}
+                              {formatCurrency(ativo.lucro_prejuizo || 0, ativo.moeda)}
                             </span>
                             <br />
                             <span className="text-xs opacity-70">
