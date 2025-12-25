@@ -158,12 +158,12 @@ export function AddRendaVariavelDialog() {
           Adicionar Ativo
         </Button>
       </DialogTrigger>
-      <DialogContent className="border-primary/20 bg-background">
+      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-2xl max-h-[95vh]">
         <DialogHeader>
           <DialogTitle className="text-primary">Adicionar Ativo de Renda Variavel</DialogTitle>
           <DialogDescription>Preencha os dados do ativo para adicionar a sua carteira</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 max-h-[calc(95vh-120px)]">
           {apiError && (
             <div className="p-3 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-600 dark:text-amber-400 text-sm">
               {apiError}

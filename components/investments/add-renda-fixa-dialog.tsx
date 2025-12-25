@@ -164,12 +164,12 @@ export function AddRendaFixaDialog() {
           Adicionar Aplicacao
         </Button>
       </DialogTrigger>
-      <DialogContent className="border-primary/20 bg-background">
+      <DialogContent className="border-primary/20 bg-background max-w-[95vw] sm:max-w-2xl max-h-[95vh]">
         <DialogHeader>
           <DialogTitle className="text-primary">Adicionar Aplicacao de Renda Fixa</DialogTitle>
           <DialogDescription>Preencha os dados da aplicacao incluindo a taxa de juros</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit} className="space-y-4">
+        <form onSubmit={handleSubmit} className="space-y-4 overflow-y-auto pr-2 max-h-[calc(95vh-120px)]">
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-2 sm:col-span-2">
               <Label htmlFor={`${formId}-nome`}>Nome da Aplicacao *</Label>
