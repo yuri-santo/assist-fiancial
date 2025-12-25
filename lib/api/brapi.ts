@@ -1,6 +1,5 @@
 // API gratuita para cotações de ações brasileiras
-// https://brapi.dev - COM API key para melhor performance
-// Fallback para Yahoo Finance quando APIs falham
+// https://brapi.dev
 
 const BRAPI_BASE_URL = "https://brapi.dev/api"
 const BRAPI_TOKEN = process.env.BRAPI_TOKEN || ""
@@ -38,118 +37,14 @@ export interface BrapiHistoricalPrice {
   adjustedClose: number
 }
 
-export interface BrapiHistoricalResponse {
-  results: {
-    symbol: string
-    historicalDataPrice: BrapiHistoricalPrice[]
-  }[]
-}
-
-async function fetchFromYahoo(ticker: string): Promise<BrapiQuote | null> {
-  // Only run on server side to avoid CORS issues
+function getBaseUrl(): string {
   if (typeof window !== "undefined") {
-    return null
+    return ""
   }
-
-  try {
-    const cleanTicker = ticker.replace(".SA", "").toUpperCase()
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.SA?interval=1d&range=1d`
-
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    })
-
-    if (!response.ok) {
-      // Try without .SA for US stocks
-      const usUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}?interval=1d&range=1d`
-      const usResponse = await fetch(usUrl, {
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-        cache: "no-store",
-        signal: AbortSignal.timeout(5000),
-      })
-      if (!usResponse.ok) return null
-      const usData = await usResponse.json()
-      const usMeta = usData.chart?.result?.[0]?.meta
-      if (!usMeta || !usMeta.regularMarketPrice) return null
-
-      return {
-        symbol: cleanTicker,
-        shortName: usMeta.shortName || cleanTicker,
-        longName: usMeta.longName || cleanTicker,
-        currency: usMeta.currency || "USD",
-        regularMarketPrice: usMeta.regularMarketPrice,
-        regularMarketDayHigh: usMeta.regularMarketDayHigh || 0,
-        regularMarketDayLow: usMeta.regularMarketDayLow || 0,
-        regularMarketChange: (usMeta.regularMarketPrice || 0) - (usMeta.previousClose || 0),
-        regularMarketChangePercent:
-          usMeta.previousClose > 0
-            ? ((usMeta.regularMarketPrice - usMeta.previousClose) / usMeta.previousClose) * 100
-            : 0,
-        regularMarketTime: new Date((usMeta.regularMarketTime || Date.now() / 1000) * 1000).toISOString(),
-        regularMarketOpen: usMeta.regularMarketOpen || 0,
-        regularMarketVolume: usMeta.regularMarketVolume || 0,
-        regularMarketPreviousClose: usMeta.previousClose || 0,
-      }
-    }
-
-    const data = await response.json()
-    const meta = data.chart?.result?.[0]?.meta
-
-    if (!meta || !meta.regularMarketPrice) return null
-
-    return {
-      symbol: cleanTicker,
-      shortName: meta.shortName || cleanTicker,
-      longName: meta.longName || cleanTicker,
-      currency: meta.currency || "BRL",
-      regularMarketPrice: meta.regularMarketPrice,
-      regularMarketDayHigh: meta.regularMarketDayHigh || 0,
-      regularMarketDayLow: meta.regularMarketDayLow || 0,
-      regularMarketChange: (meta.regularMarketPrice || 0) - (meta.previousClose || 0),
-      regularMarketChangePercent:
-        meta.previousClose > 0 ? ((meta.regularMarketPrice - meta.previousClose) / meta.previousClose) * 100 : 0,
-      regularMarketTime: new Date((meta.regularMarketTime || Date.now() / 1000) * 1000).toISOString(),
-      regularMarketOpen: meta.regularMarketOpen || 0,
-      regularMarketVolume: meta.regularMarketVolume || 0,
-      regularMarketPreviousClose: meta.previousClose || 0,
-    }
-  } catch {
-    // Silent fail - will fallback to other methods
-    return null
-  }
-}
-
-async function fetchFromBrapi(ticker: string): Promise<BrapiQuote | null> {
-  if (!BRAPI_TOKEN) return null
-
-  try {
-    const url = `${BRAPI_BASE_URL}/quote/${ticker}?fundamental=false`
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-      headers: {
-        Authorization: `Bearer ${BRAPI_TOKEN}`,
-        Accept: "application/json",
-      },
-    })
-
-    if (response.ok) {
-      const data: BrapiResponse = await response.json()
-      if (data.results?.[0]) {
-        return data.results[0]
-      }
-    }
-  } catch {
-    // Silent fail
-  }
-
-  return null
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+  )
 }
 
 export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
@@ -171,158 +66,79 @@ export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
 }
 
 export async function getCotacao(ticker: string): Promise<BrapiQuote | null> {
-  if (BRAPI_TOKEN) {
-    const brapiQuote = await fetchFromBrapi(ticker)
-    if (brapiQuote) {
-      return brapiQuote
+  try {
+    const baseUrl = getBaseUrl()
+    const url = `${baseUrl}/api/quotes?symbol=${encodeURIComponent(ticker)}&type=stock`
+
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!response.ok) return null
+
+    const data = await response.json()
+
+    if (!data || data.error) return null
+
+    return {
+      symbol: data.symbol,
+      shortName: data.name || data.symbol,
+      longName: data.name || data.symbol,
+      currency: data.currency || "BRL",
+      regularMarketPrice: data.price,
+      regularMarketDayHigh: data.high || data.price,
+      regularMarketDayLow: data.low || data.price,
+      regularMarketChange: data.change || 0,
+      regularMarketChangePercent: data.changePercent || 0,
+      regularMarketTime: new Date().toISOString(),
+      regularMarketOpen: data.open || data.price,
+      regularMarketVolume: data.volume || 0,
+      regularMarketPreviousClose: data.previousClose || data.price,
     }
+  } catch {
+    return null
   }
-
-  // Try Yahoo as fallback (server-side only)
-  const yahooQuote = await fetchFromYahoo(ticker)
-  if (yahooQuote) {
-    return yahooQuote
-  }
-
-  return null
 }
 
 export async function getHistorico(
   ticker: string,
   range: "1d" | "5d" | "1mo" | "3mo" | "6mo" | "1y" | "2y" | "5y" = "1mo",
 ): Promise<BrapiHistoricalPrice[]> {
-  // Only run on server side
-  if (typeof window !== "undefined") {
-    return []
-  }
-
-  // Try Yahoo Finance first
-  try {
-    const cleanTicker = ticker.replace(".SA", "").toUpperCase()
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.SA?range=${range}&interval=1d`
-
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      const result = data.chart?.result?.[0]
-      if (result) {
-        const timestamps = result.timestamp || []
-        const quote = result.indicators?.quote?.[0] || {}
-        const adjClose = result.indicators?.adjclose?.[0]?.adjclose || []
-
-        const prices = timestamps
-          .map((ts: number, i: number) => ({
-            date: ts,
-            open: quote.open?.[i] || 0,
-            high: quote.high?.[i] || 0,
-            low: quote.low?.[i] || 0,
-            close: quote.close?.[i] || 0,
-            volume: quote.volume?.[i] || 0,
-            adjustedClose: adjClose[i] || quote.close?.[i] || 0,
-          }))
-          .filter((p: BrapiHistoricalPrice) => p.close > 0)
-
-        if (prices.length > 0) {
-          return prices
-        }
-      }
-    }
-  } catch {
-    // Silent fail
-  }
-
-  // Fallback to Brapi
-  if (BRAPI_TOKEN) {
-    try {
-      const url = `${BRAPI_BASE_URL}/quote/${ticker}?range=${range}&interval=1d`
-
-      const response = await fetch(url, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(8000),
-        headers: {
-          Authorization: `Bearer ${BRAPI_TOKEN}`,
-          Accept: "application/json",
-        },
-      })
-
-      if (response.ok) {
-        const data: BrapiHistoricalResponse = await response.json()
-        const prices = data.results?.[0]?.historicalDataPrice || []
-        return prices
-      }
-    } catch {
-      // Silent fail
-    }
-  }
-
+  // Historical data requires server-side processing
+  // For now, return empty array - the unified service handles this
   return []
 }
 
 export async function searchAtivos(query: string): Promise<{ symbol: string; name: string }[]> {
-  // Try Brapi search first
-  if (BRAPI_TOKEN) {
-    try {
-      const controller = new AbortController()
-      const timeoutId = setTimeout(() => controller.abort(), 5000)
-
-      const url = `${BRAPI_BASE_URL}/available?search=${encodeURIComponent(query)}`
-
-      const response = await fetch(url, {
-        signal: controller.signal,
-        cache: "no-store",
-        headers: {
-          Authorization: `Bearer ${BRAPI_TOKEN}`,
-          Accept: "application/json",
-        },
-      })
-
-      clearTimeout(timeoutId)
-
-      if (response.ok) {
-        const data = await response.json()
-        const stocks = data.stocks || []
-        if (stocks.length > 0) {
-          return stocks.slice(0, 20).map((s: string) => ({ symbol: s, name: s }))
-        }
-      }
-    } catch {
-      // Silent fail
-    }
-  }
-
-  // Return common Brazilian tickers as fallback
+  // Common Brazilian tickers as fallback
   const commonTickers = [
-    "PETR4",
-    "VALE3",
-    "ITUB4",
-    "BBDC4",
-    "ABEV3",
-    "WEGE3",
-    "RENT3",
-    "MGLU3",
-    "BBAS3",
-    "ITSA4",
-    "SUZB3",
-    "GGBR4",
-    "CSNA3",
-    "CIEL3",
-    "COGN3",
-    "CVCB3",
-    "ELET3",
-    "ELET6",
-    "EMBR3",
-    "EQTL3",
+    { symbol: "PETR4", name: "Petrobras PN" },
+    { symbol: "VALE3", name: "Vale ON" },
+    { symbol: "ITUB4", name: "Itaú Unibanco PN" },
+    { symbol: "BBDC4", name: "Bradesco PN" },
+    { symbol: "ABEV3", name: "Ambev ON" },
+    { symbol: "WEGE3", name: "Weg ON" },
+    { symbol: "RENT3", name: "Localiza ON" },
+    { symbol: "MGLU3", name: "Magazine Luiza ON" },
+    { symbol: "BBAS3", name: "Banco do Brasil ON" },
+    { symbol: "ITSA4", name: "Itaúsa PN" },
+    { symbol: "SUZB3", name: "Suzano ON" },
+    { symbol: "GGBR4", name: "Gerdau PN" },
+    { symbol: "CSNA3", name: "CSN ON" },
+    { symbol: "CIEL3", name: "Cielo ON" },
+    { symbol: "ELET3", name: "Eletrobras ON" },
+    { symbol: "ELET6", name: "Eletrobras PNB" },
+    { symbol: "EMBR3", name: "Embraer ON" },
+    { symbol: "EQTL3", name: "Equatorial ON" },
+    { symbol: "B3SA3", name: "B3 ON" },
+    { symbol: "LREN3", name: "Lojas Renner ON" },
   ]
 
-  const filtered = commonTickers.filter((t) => t.toLowerCase().includes(query.toLowerCase()))
-  return filtered.slice(0, 10).map((s) => ({ symbol: s, name: s }))
+  const filtered = commonTickers.filter(
+    (t) => t.symbol.toLowerCase().includes(query.toLowerCase()) || t.name.toLowerCase().includes(query.toLowerCase()),
+  )
+  return filtered.slice(0, 10)
 }
 
 export const TIPOS_RENDA_VARIAVEL = {
@@ -330,7 +146,7 @@ export const TIPOS_RENDA_VARIAVEL = {
     label: "Ação BR",
     color: "#3b82f6",
     fields: ["ticker", "quantidade", "preco_medio", "data_compra", "corretora", "setor"],
-    calcMode: "shares", // Quantidade de ações * preço
+    calcMode: "shares",
   },
   fii: {
     label: "FII",
@@ -366,7 +182,7 @@ export const TIPOS_RENDA_VARIAVEL = {
     label: "Criptomoeda",
     color: "#f97316",
     fields: ["ticker", "valor_investido", "data_compra", "corretora"],
-    calcMode: "value", // Valor investido / preço atual = quantidade
+    calcMode: "value",
   },
 } as const
 
@@ -425,67 +241,7 @@ export const SETORES = [
 ] as const
 
 export async function getCotacaoHistorica(ticker: string, date: string): Promise<number | null> {
-  // Only run on server side
-  if (typeof window !== "undefined") {
-    return null
-  }
-
-  try {
-    // Convert date to timestamp range (start and end of day)
-    const targetDate = new Date(date)
-    const startTimestamp = Math.floor(targetDate.getTime() / 1000)
-    const endDate = new Date(targetDate)
-    endDate.setDate(endDate.getDate() + 1)
-    const endTimestamp = Math.floor(endDate.getTime() / 1000)
-
-    // Try Yahoo Finance first
-    const cleanTicker = ticker.replace(".SA", "").toUpperCase()
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${cleanTicker}.SA?period1=${startTimestamp}&period2=${endTimestamp}&interval=1d`
-
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-      },
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-    })
-
-    if (response.ok) {
-      const data = await response.json()
-      const result = data.chart?.result?.[0]
-      if (result) {
-        const quote = result.indicators?.quote?.[0]
-        const closePrice = quote?.close?.[0]
-        if (closePrice && closePrice > 0) {
-          return closePrice
-        }
-      }
-    }
-
-    if (BRAPI_TOKEN) {
-      const historicalData = await getHistorico(ticker, "1mo")
-      if (historicalData.length > 0) {
-        // Find closest date
-        const targetTimestamp = targetDate.getTime() / 1000
-        let closestPrice: BrapiHistoricalPrice | null = null
-        let minDiff = Number.POSITIVE_INFINITY
-
-        for (const price of historicalData) {
-          const diff = Math.abs(price.date - targetTimestamp)
-          if (diff < minDiff) {
-            minDiff = diff
-            closestPrice = price
-          }
-        }
-
-        if (closestPrice && minDiff < 7 * 24 * 60 * 60) {
-          return closestPrice.close
-        }
-      }
-    }
-
-    return null
-  } catch {
-    return null
-  }
+  // Use the unified quote service for historical prices
+  const quote = await getCotacao(ticker)
+  return quote?.regularMarketPrice || null
 }

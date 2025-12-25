@@ -1,13 +1,10 @@
-// Serviço unificado com fallback entre múltiplas APIs
+// Serviço unificado que usa a API route para buscar cotações
+// Funciona tanto no cliente quanto no servidor
 
-import { getCotacao as getBrapiCotacao, getCotacaoHistorica as getBrapiHistorica } from "./brapi"
 import { getCryptoCotacao, getCryptoHistorica, getUSDtoBRL } from "./crypto-service"
-import { getUSStockQuote, getUSStockHistoricalPrice } from "./us-stocks-service"
-
-const COINGECKO_API = "https://api.coingecko.com/api/v3"
 
 const quoteCache = new Map<string, { data: UnifiedQuote; timestamp: number }>()
-const CACHE_TTL = 60 * 1000 // 1 minute cache
+const CACHE_TTL = 60 * 1000 // 1 minute
 
 export interface UnifiedQuote {
   symbol: string
@@ -16,70 +13,19 @@ export interface UnifiedQuote {
   change: number
   changePercent: number
   currency: string
-  source: "yahoo" | "brapi" | "coingecko" | "alphavantage" | "fallback"
+  source: string
+  type?: "stock" | "crypto"
 }
 
-async function fetchFromCoinGecko(ticker: string, currency: "BRL" | "USD"): Promise<UnifiedQuote | null> {
-  try {
-    const coinIdMap: Record<string, string> = {
-      BTC: "bitcoin",
-      ETH: "ethereum",
-      BNB: "binancecoin",
-      XRP: "ripple",
-      ADA: "cardano",
-      DOGE: "dogecoin",
-      SOL: "solana",
-      DOT: "polkadot",
-      MATIC: "matic-network",
-      LTC: "litecoin",
-      SHIB: "shiba-inu",
-      AVAX: "avalanche-2",
-      UNI: "uniswap",
-      LINK: "chainlink",
-      TRX: "tron",
-      ATOM: "cosmos",
-      XLM: "stellar",
-      ETC: "ethereum-classic",
-      FIL: "filecoin",
-      HBAR: "hedera-hashgraph",
-    }
-
-    const coinId = coinIdMap[ticker.toUpperCase()] || ticker.toLowerCase()
-
-    if (!coinIdMap[ticker.toUpperCase()] && ticker.length > 5) {
-      return null
-    }
-
-    const vsCurrency = currency.toLowerCase()
-    const url = `${COINGECKO_API}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}&include_24hr_change=true`
-
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(5000),
-    })
-
-    if (!response.ok) return null
-
-    const data = await response.json()
-    const coinData = data[coinId]
-
-    if (!coinData) return null
-
-    const price = coinData[vsCurrency]
-    const change24h = coinData[`${vsCurrency}_24h_change`] || 0
-
-    return {
-      symbol: ticker.toUpperCase(),
-      name: ticker.toUpperCase(),
-      price,
-      change: (price * change24h) / 100,
-      changePercent: change24h,
-      currency: currency,
-      source: "coingecko",
-    }
-  } catch {
-    return null
+function getBaseUrl(): string {
+  if (typeof window !== "undefined") {
+    return "" // Client-side: use relative URL
   }
+  // Server-side
+  return (
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
+  )
 }
 
 export async function getUnifiedQuote(
@@ -93,91 +39,62 @@ export async function getUnifiedQuote(
     return cached.data
   }
 
-  let result: UnifiedQuote | null = null
-
+  // For crypto, use the crypto service directly (CoinGecko doesn't have CORS issues)
   if (assetType === "crypto") {
-    const geckoQuote = await fetchFromCoinGecko(ticker, currency)
-    if (geckoQuote) {
-      result = geckoQuote
-    } else {
-      const cryptoQuote = await getCryptoCotacao(ticker, currency)
-      if (cryptoQuote) {
-        result = {
-          symbol: ticker.toUpperCase(),
-          name: cryptoQuote.coinName,
-          price: cryptoQuote.regularMarketPrice,
-          change: cryptoQuote.regularMarketChange,
-          changePercent: cryptoQuote.regularMarketChangePercent,
-          currency: currency,
-          source: "brapi",
-        }
+    const cryptoQuote = await getCryptoCotacao(ticker, currency)
+    if (cryptoQuote) {
+      const result: UnifiedQuote = {
+        symbol: cryptoQuote.coin,
+        name: cryptoQuote.coinName,
+        price: cryptoQuote.regularMarketPrice,
+        change: cryptoQuote.regularMarketChange,
+        changePercent: cryptoQuote.regularMarketChangePercent,
+        currency: cryptoQuote.currency,
+        source: "coingecko",
+        type: "crypto",
       }
-    }
-
-    if (result) {
       quoteCache.set(cacheKey, { data: result, timestamp: Date.now() })
+      return result
     }
-    return result
+    return null
   }
 
-  // For stocks - try Brapi first (Brazilian stocks), then US stocks API
-  const brapiQuote = await getBrapiCotacao(ticker)
-  if (brapiQuote) {
-    let price = brapiQuote.regularMarketPrice
-    let change = brapiQuote.regularMarketChange
-    let resultCurrency = brapiQuote.currency
+  // For stocks, use the API route
+  try {
+    const baseUrl = getBaseUrl()
+    const url = `${baseUrl}/api/quotes?symbol=${encodeURIComponent(ticker)}&type=stock&currency=${currency}`
 
-    if (brapiQuote.currency === "USD" && currency === "BRL") {
-      const usdToBrl = await getUSDtoBRL()
-      price = brapiQuote.regularMarketPrice * usdToBrl
-      change = brapiQuote.regularMarketChange * usdToBrl
-      resultCurrency = "BRL"
+    const response = await fetch(url, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(10000),
+    })
+
+    if (!response.ok) {
+      return null
     }
 
-    result = {
-      symbol: brapiQuote.symbol,
-      name: brapiQuote.shortName,
-      price,
-      change,
-      changePercent: brapiQuote.regularMarketChangePercent,
-      currency: resultCurrency,
-      source: "brapi",
-    }
-  }
+    const data = await response.json()
 
-  if (!result) {
-    const usStockQuote = await getUSStockQuote(ticker)
-    if (usStockQuote) {
-      if (currency === "BRL" && usStockQuote.currency === "USD") {
-        const usdToBrl = await getUSDtoBRL()
-        result = {
-          symbol: usStockQuote.symbol,
-          name: usStockQuote.name,
-          price: usStockQuote.price * usdToBrl,
-          change: usStockQuote.change * usdToBrl,
-          changePercent: usStockQuote.changePercent,
-          currency: "BRL",
-          source: "yahoo",
-        }
-      } else {
-        result = {
-          symbol: usStockQuote.symbol,
-          name: usStockQuote.name,
-          price: usStockQuote.price,
-          change: usStockQuote.change,
-          changePercent: usStockQuote.changePercent,
-          currency: usStockQuote.currency,
-          source: "yahoo",
-        }
-      }
+    if (!data || data.error) {
+      return null
     }
-  }
 
-  if (result) {
+    const result: UnifiedQuote = {
+      symbol: data.symbol,
+      name: data.name,
+      price: data.price,
+      change: data.change || 0,
+      changePercent: data.changePercent || 0,
+      currency: data.currency || currency,
+      source: data.source || "api",
+      type: "stock",
+    }
+
     quoteCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    return result
+  } catch {
+    return null
   }
-
-  return result
 }
 
 const historicalCache = new Map<string, { price: number; timestamp: number }>()
@@ -198,28 +115,9 @@ export async function getHistoricalPrice(
   let result: number | null = null
 
   if (assetType === "crypto") {
-    const cryptoPrice = await getCryptoHistorica(ticker, date, currency)
-    if (cryptoPrice) result = cryptoPrice
+    result = await getCryptoHistorica(ticker, date, currency)
   } else {
-    // Try Brapi first for Brazilian stocks
-    const stockPrice = await getBrapiHistorica(ticker, date)
-    if (stockPrice) {
-      result = stockPrice
-    } else {
-      const usPrice = await getUSStockHistoricalPrice(ticker, date)
-      if (usPrice) {
-        if (currency === "BRL") {
-          const usdToBrl = await getUSDtoBRL()
-          result = usPrice * usdToBrl
-        } else {
-          result = usPrice
-        }
-      }
-    }
-  }
-
-  // If historical price not available, try current price
-  if (!result) {
+    // For stocks, use current price as fallback
     const currentQuote = await getUnifiedQuote(ticker, assetType, currency)
     if (currentQuote) {
       result = currentQuote.price
@@ -232,3 +130,6 @@ export async function getHistoricalPrice(
 
   return result
 }
+
+// Re-export for convenience
+export { getUSDtoBRL }

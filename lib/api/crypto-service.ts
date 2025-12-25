@@ -1,16 +1,12 @@
-// API de Criptomoedas - CoinGecko como primário, Brapi como fallback
-// CoinGecko não precisa de autenticação
+// API de Criptomoedas - usa API route unificada
 
-const BRAPI_BASE_URL = "https://brapi.dev/api"
-const BRAPI_TOKEN = process.env.BRAPI_TOKEN || ""
 const COINGECKO_API = "https://api.coingecko.com/api/v3"
 
 const cryptoCache = new Map<string, { data: CryptoQuote; timestamp: number }>()
-const usdBrlCache: { rate: number; timestamp: number } | null = null
 const CACHE_TTL = 60 * 1000 // 1 minute cache
 const USD_BRL_CACHE_TTL = 5 * 60 * 1000 // 5 minutes for exchange rate
 
-const COINGECKO_IDS: Record<string, string> = {
+export const COINGECKO_IDS: Record<string, string> = {
   BTC: "bitcoin",
   ETH: "ethereum",
   BNB: "binancecoin",
@@ -31,6 +27,8 @@ const COINGECKO_IDS: Record<string, string> = {
   ETC: "ethereum-classic",
   FIL: "filecoin",
   HBAR: "hedera-hashgraph",
+  USDT: "tether",
+  USDC: "usd-coin",
 }
 
 export interface CryptoQuote {
@@ -49,47 +47,34 @@ export interface CryptoQuote {
   marketCap: number
 }
 
-export interface CryptoResponse {
-  coins: CryptoQuote[]
-  availableCoins: string[]
-  requestedAt: string
-  took: string
-}
-
 let cachedUsdBrl: { rate: number; timestamp: number } | null = null
 
 export async function getUSDtoBRL(): Promise<number> {
-  // Check cache
   if (cachedUsdBrl && Date.now() - cachedUsdBrl.timestamp < USD_BRL_CACHE_TTL) {
     return cachedUsdBrl.rate
   }
 
   try {
-    // First try Brapi
-    if (BRAPI_TOKEN) {
-      const url = `${BRAPI_BASE_URL}/v2/currency?currency=USD-BRL`
-      const response = await fetch(url, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(5000),
-        headers: {
-          Authorization: `Bearer ${BRAPI_TOKEN}`,
-          Accept: "application/json",
-        },
-      })
+    const response = await fetch(`${COINGECKO_API}/simple/price?ids=usd&vs_currencies=brl`, {
+      cache: "no-store",
+      signal: AbortSignal.timeout(5000),
+    })
 
-      if (response.ok) {
-        const data = await response.json()
-        if (data.currency && data.currency[0]?.bidPrice) {
-          const rate = Number.parseFloat(data.currency[0].bidPrice)
-          cachedUsdBrl = { rate, timestamp: Date.now() }
-          return rate
-        }
+    if (response.ok) {
+      const data = await response.json()
+      if (data.usd?.brl) {
+        const rate = data.usd.brl
+        cachedUsdBrl = { rate, timestamp: Date.now() }
+        return rate
       }
     }
+  } catch {
+    // Silent fail
+  }
 
-    // Fallback to exchangerate-api (free, no auth)
-    const fallbackUrl = "https://api.exchangerate-api.com/v4/latest/USD"
-    const fallbackResponse = await fetch(fallbackUrl, {
+  // Fallback to exchangerate-api
+  try {
+    const fallbackResponse = await fetch("https://api.exchangerate-api.com/v4/latest/USD", {
       cache: "no-store",
       signal: AbortSignal.timeout(5000),
     })
@@ -106,17 +91,22 @@ export async function getUSDtoBRL(): Promise<number> {
     // Silent fail
   }
 
-  // Fallback rate
   return 5.8
 }
 
-async function fetchFromCoinGecko(coin: string, currency: "BRL" | "USD"): Promise<CryptoQuote | null> {
+export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "BRL"): Promise<CryptoQuote | null> {
+  const cleanCoin = coin.replace(/-USD|-BRL/gi, "").toUpperCase()
+
+  const cacheKey = `${cleanCoin}-${currency}`
+  const cached = cryptoCache.get(cacheKey)
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.data
+  }
+
+  const coinId = COINGECKO_IDS[cleanCoin]
+  if (!coinId) return null
+
   try {
-    const cleanCoin = coin.replace(/-USD|-BRL/gi, "").toUpperCase()
-    const coinId = COINGECKO_IDS[cleanCoin]
-
-    if (!coinId) return null // Unknown crypto
-
     const vsCurrency = currency.toLowerCase()
     const url = `${COINGECKO_API}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}&include_24hr_change=true&include_24hr_high=true&include_24hr_low=true&include_market_cap=true`
 
@@ -138,7 +128,7 @@ async function fetchFromCoinGecko(coin: string, currency: "BRL" | "USD"): Promis
     const low24h = coinData[`${vsCurrency}_24h_low`] || price
     const marketCap = coinData[`${vsCurrency}_market_cap`] || 0
 
-    return {
+    const result: CryptoQuote = {
       coin: cleanCoin,
       coinName: cleanCoin,
       currency: currency,
@@ -153,79 +143,15 @@ async function fetchFromCoinGecko(coin: string, currency: "BRL" | "USD"): Promis
       circulatingSupply: 0,
       marketCap: marketCap,
     }
+
+    cryptoCache.set(cacheKey, { data: result, timestamp: Date.now() })
+    return result
   } catch {
     return null
   }
 }
 
-export async function getCryptoCotacao(coin: string, currency: "BRL" | "USD" = "BRL"): Promise<CryptoQuote | null> {
-  const cleanCoin = coin.replace(/-USD|-BRL/gi, "").toUpperCase()
-
-  // Check cache first
-  const cacheKey = `${cleanCoin}-${currency}`
-  const cached = cryptoCache.get(cacheKey)
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
-    return cached.data
-  }
-
-  const geckoQuote = await fetchFromCoinGecko(cleanCoin, currency)
-  if (geckoQuote) {
-    cryptoCache.set(cacheKey, { data: geckoQuote, timestamp: Date.now() })
-    return geckoQuote
-  }
-
-  // Fallback to Brapi only if token exists
-  if (BRAPI_TOKEN) {
-    try {
-      const url = `${BRAPI_BASE_URL}/v2/crypto?coin=${cleanCoin}&currency=USD`
-
-      const response = await fetch(url, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(8000),
-        headers: {
-          Authorization: `Bearer ${BRAPI_TOKEN}`,
-          Accept: "application/json",
-        },
-      })
-
-      if (!response.ok) return null
-
-      const data: CryptoResponse = await response.json()
-
-      if (!data.coins || data.coins.length === 0) return null
-
-      const cryptoData = data.coins[0]
-
-      let result: CryptoQuote
-
-      if (currency === "BRL") {
-        const usdToBrl = await getUSDtoBRL()
-        result = {
-          ...cryptoData,
-          currency: "BRL",
-          currencyRateFromUSD: usdToBrl,
-          regularMarketPrice: cryptoData.regularMarketPrice * usdToBrl,
-          regularMarketDayHigh: cryptoData.regularMarketDayHigh * usdToBrl,
-          regularMarketDayLow: cryptoData.regularMarketDayLow * usdToBrl,
-          regularMarketChange: cryptoData.regularMarketChange * usdToBrl,
-          marketCap: cryptoData.marketCap * usdToBrl,
-        }
-      } else {
-        result = cryptoData
-      }
-
-      cryptoCache.set(cacheKey, { data: result, timestamp: Date.now() })
-      return result
-    } catch {
-      return null
-    }
-  }
-
-  return null
-}
-
 export async function getAvailableCryptos(): Promise<string[]> {
-  // Return static list (more reliable than API call)
   return POPULAR_CRYPTOS
 }
 
@@ -245,7 +171,6 @@ export async function getCryptoHistorica(
   currency: "BRL" | "USD" = "BRL",
 ): Promise<number | null> {
   try {
-    // For crypto, if date is recent (within 7 days), use current price
     const targetDate = new Date(date)
     const now = new Date()
     const daysDiff = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24))
@@ -257,7 +182,6 @@ export async function getCryptoHistorica(
       }
     }
 
-    // For older dates, try CoinGecko history API
     const cleanCoin = coin.replace(/-USD|-BRL/gi, "").toUpperCase()
     const coinId = COINGECKO_IDS[cleanCoin]
 
@@ -279,7 +203,6 @@ export async function getCryptoHistorica(
       }
     }
 
-    // Fallback to current price
     const currentQuote = await getCryptoCotacao(coin, currency)
     return currentQuote?.regularMarketPrice || null
   } catch {
@@ -287,7 +210,6 @@ export async function getCryptoHistorica(
   }
 }
 
-// Criptomoedas mais populares para fallback
 export const POPULAR_CRYPTOS = [
   "BTC",
   "ETH",
