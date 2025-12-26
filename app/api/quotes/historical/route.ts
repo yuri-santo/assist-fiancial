@@ -79,16 +79,6 @@ const US_STOCKS = new Set([
   "ORCL",
   "AMD",
   "INTC",
-  "QCOM",
-  "IBM",
-  "CRM",
-  "ADBE",
-  "PYPL",
-  "SQ",
-  "SHOP",
-  "UBER",
-  "BA",
-  "GE",
 ])
 
 function resolveAlias(symbol: string): string {
@@ -103,12 +93,89 @@ function detectAssetType(symbol: string): "crypto" | "br_stock" | "us_stock" | "
   return "unknown"
 }
 
+/**
+ * USD->BRL com fallback e (quando possível) com base na DATA do histórico.
+ * - 1) exchangerate.host com data (ex: /2024-12-02)
+ * - 2) AwesomeAPI (última)
+ * - 3) fallback
+ */
+async function fetchUSDtoBRL(date?: string): Promise<number> {
+  // 1) exchangerate.host (tem endpoint por data)
+  try {
+    const baseUrl = date ? `https://api.exchangerate.host/${date}` : "https://api.exchangerate.host/latest"
+    const r = await fetch(`${baseUrl}?base=USD&symbols=BRL`, {
+      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+      next: { revalidate: 60 * 60 },
+    })
+    if (r.ok) {
+      const data = await r.json()
+      const rate = Number(data?.rates?.BRL)
+      if (!Number.isNaN(rate) && rate > 0) return rate
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2) AwesomeAPI (última cotação)
+  try {
+    const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL", {
+      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+      next: { revalidate: 60 * 60 },
+    })
+    if (r.ok) {
+      const data = await r.json()
+      const bid = Number(data?.USDBRL?.bid)
+      if (!Number.isNaN(bid) && bid > 0) return bid
+    }
+  } catch {
+    // ignore
+  }
+
+  return 5.0
+}
+
+function toUnixSeconds(date: Date): number {
+  return Math.floor(date.getTime() / 1000)
+}
+
+function clampToUTCStartEnd(dateStr: string): { start: number; end: number } {
+  // YYYY-MM-DD -> [00:00:00Z, 23:59:59Z]
+  const [y, m, d] = dateStr.split("-").map((v) => Number(v))
+  const start = Date.UTC(y, m - 1, d, 0, 0, 0)
+  const end = Date.UTC(y, m - 1, d, 23, 59, 59)
+  return { start: Math.floor(start / 1000), end: Math.floor(end / 1000) }
+}
+
 async function fetchCryptoHistorical(symbol: string, date: string, currency: "BRL" | "USD"): Promise<number | null> {
   const coinId = CRYPTO_MAP[symbol]
   if (!coinId) return null
 
+  // 1) Tenta o range (mais preciso do que /history, porque traz pontos dentro do dia)
   try {
-    // CoinGecko requires date in dd-mm-yyyy format
+    const { start, end } = clampToUTCStartEnd(date)
+    const vs = currency.toLowerCase()
+    const url = `${COINGECKO_API}/coins/${coinId}/market_chart/range?vs_currency=${vs}&from=${start}&to=${end}`
+
+    const response = await fetch(url, {
+      signal: AbortSignal.timeout(10000),
+      next: { revalidate: 60 * 60 },
+    })
+
+    if (response.ok) {
+      const data = await response.json()
+      const prices: Array<[number, number]> = Array.isArray(data?.prices) ? data.prices : []
+      // pega o último ponto do dia (mais próximo do "fechamento" daquele dia, em UTC)
+      const last = prices.length ? prices[prices.length - 1]?.[1] : null
+      if (typeof last === "number" && !Number.isNaN(last) && last > 0) return last
+    }
+  } catch {
+    // ignore
+  }
+
+  // 2) Fallback: /history (dd-mm-yyyy)
+  try {
     const [year, month, day] = date.split("-")
     const formattedDate = `${day}-${month}-${year}`
 
@@ -116,6 +183,7 @@ async function fetchCryptoHistorical(symbol: string, date: string, currency: "BR
 
     const response = await fetch(url, {
       signal: AbortSignal.timeout(10000),
+      next: { revalidate: 60 * 60 },
     })
 
     if (!response.ok) return null
@@ -123,31 +191,28 @@ async function fetchCryptoHistorical(symbol: string, date: string, currency: "BR
     const data = await response.json()
     const price = currency === "BRL" ? data.market_data?.current_price?.brl : data.market_data?.current_price?.usd
 
-    return price || null
+    return typeof price === "number" && !Number.isNaN(price) ? price : null
   } catch {
     return null
   }
 }
 
+/**
+ * Histórico de ações via Yahoo:
+ * - Usa period1/period2 ao redor da data (mais preciso do que escolher range enorme)
+ * - Seleciona o CLOSE do dia alvo; se não existir (feriado/fim de semana), pega o último CLOSE ANTES da data.
+ */
 async function fetchStockHistorical(symbol: string, date: string, suffix = ""): Promise<number | null> {
   try {
-    const targetDate = new Date(date)
-    const now = new Date()
+    const targetDate = new Date(`${date}T00:00:00Z`)
+    const { start, end } = clampToUTCStartEnd(date)
 
-    // Calculate days between dates
-    const diffTime = Math.abs(now.getTime() - targetDate.getTime())
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
+    // janela de busca: 7 dias antes até 3 dias depois (cobre feriado e falta de pregão)
+    const period1 = start - 7 * 24 * 60 * 60
+    const period2 = end + 3 * 24 * 60 * 60
 
-    // Yahoo Finance range options
-    let range = "1mo"
-    if (diffDays > 30) range = "3mo"
-    if (diffDays > 90) range = "6mo"
-    if (diffDays > 180) range = "1y"
-    if (diffDays > 365) range = "2y"
-    if (diffDays > 730) range = "5y"
-    if (diffDays > 1825) range = "max"
-
-    const url = `${YAHOO_FINANCE_BASE}/${symbol}${suffix}?interval=1d&range=${range}`
+    // interval 1d + period1/period2 tende a ser mais preciso e rápido
+    const url = `${YAHOO_FINANCE_BASE}/${symbol}${suffix}?interval=1d&period1=${period1}&period2=${period2}`
 
     const response = await fetch(url, {
       headers: {
@@ -155,6 +220,7 @@ async function fetchStockHistorical(symbol: string, date: string, suffix = ""): 
         Accept: "application/json",
       },
       signal: AbortSignal.timeout(10000),
+      next: { revalidate: 60 * 60 },
     })
 
     if (!response.ok) return null
@@ -162,29 +228,52 @@ async function fetchStockHistorical(symbol: string, date: string, suffix = ""): 
     const data = await response.json()
     const result = data.chart?.result?.[0]
 
-    if (!result || !result.timestamp || !result.indicators?.quote?.[0]?.close) {
-      return null
+    const timestamps: number[] = result?.timestamp || []
+    const closes: Array<number | null> = result?.indicators?.quote?.[0]?.close || []
+
+    if (!timestamps.length || !closes.length) return null
+
+    const targetTs = toUnixSeconds(targetDate)
+
+    // Primeiro: tenta achar o próprio dia (timestamp dentro do mesmo dia UTC)
+    // Yahoo retorna timestamps em UTC (segundos). Vamos comparar por "dia" UTC.
+    const targetDay = new Date(targetDate).toISOString().slice(0, 10)
+
+    let exact: number | null = null
+    for (let i = 0; i < timestamps.length; i++) {
+      const day = new Date(timestamps[i] * 1000).toISOString().slice(0, 10)
+      if (day === targetDay) {
+        const p = closes[i]
+        if (typeof p === "number" && !Number.isNaN(p)) {
+          exact = p
+          break
+        }
+      }
     }
+    if (exact !== null) return exact
 
-    const timestamps = result.timestamp
-    const closes = result.indicators.quote[0].close
+    // Se não existe dia exato (fim de semana/feriado), pega o último close <= targetTs
+    let best: number | null = null
+    for (let i = timestamps.length - 1; i >= 0; i--) {
+      if (timestamps[i] <= targetTs) {
+        const p = closes[i]
+        if (typeof p === "number" && !Number.isNaN(p)) {
+          best = p
+          break
+        }
+      }
+    }
+    if (best !== null) return best
 
-    // Find the closest date
-    const targetTimestamp = targetDate.getTime() / 1000
-
-    let closestIndex = 0
-    let closestDiff = Math.abs(timestamps[0] - targetTimestamp)
-
-    for (let i = 1; i < timestamps.length; i++) {
-      const diff = Math.abs(timestamps[i] - targetTimestamp)
-      if (diff < closestDiff) {
-        closestDiff = diff
-        closestIndex = i
+    // Último fallback: pega o primeiro close após a data (quando não há nada antes na janela)
+    for (let i = 0; i < timestamps.length; i++) {
+      if (timestamps[i] > targetTs) {
+        const p = closes[i]
+        if (typeof p === "number" && !Number.isNaN(p)) return p
       }
     }
 
-    const price = closes[closestIndex]
-    return price && !isNaN(price) ? price : null
+    return null
   } catch {
     return null
   }
@@ -215,40 +304,46 @@ export async function GET(request: Request) {
   // Crypto
   if (forceType === "crypto" || detectedType === "crypto") {
     price = await fetchCryptoHistorical(symbol, date, currency)
-    if (price) {
+    if (price !== null) {
       return NextResponse.json({ symbol, date, price, currency, source: "coingecko" })
     }
   }
 
   // Stocks
   if (forceType === "stock" || detectedType !== "crypto") {
+    // Para conversão correta, a gente precisa saber de qual mercado veio a cotação.
+    let market: "US" | "BR" | "UNKNOWN" = "UNKNOWN"
+
     if (detectedType === "br_stock") {
       price = await fetchStockHistorical(symbol, date, ".SA")
+      if (price !== null) market = "BR"
     } else if (detectedType === "us_stock") {
       price = await fetchStockHistorical(symbol, date)
+      if (price !== null) market = "US"
     } else {
       // Try US first, then BR
       price = await fetchStockHistorical(symbol, date)
-      if (!price) {
+      if (price !== null) {
+        market = "US"
+      } else {
         price = await fetchStockHistorical(symbol, date, ".SA")
+        if (price !== null) market = "BR"
       }
     }
 
-    if (price) {
-      // Convert to BRL if needed
-      if (currency === "BRL" && detectedType === "us_stock") {
-        try {
-          const usdResponse = await fetch(`${COINGECKO_API}/simple/price?ids=usd&vs_currencies=brl`)
-          if (usdResponse.ok) {
-            const usdData = await usdResponse.json()
-            const usdToBrl = usdData.usd?.brl || 5.0
-            price = price * usdToBrl
-          }
-        } catch {
-          // Keep USD price
-        }
+    if (price !== null) {
+      // Convert moeda:
+      // - US (Yahoo) vem em USD
+      // - BR (.SA) vem em BRL
+      if (currency === "BRL" && market === "US") {
+        const usdToBrl = await fetchUSDtoBRL(date)
+        price = price * usdToBrl
+      } else if (currency === "USD" && market === "BR") {
+        const usdToBrl = await fetchUSDtoBRL(date)
+        price = price / usdToBrl
       }
-      return NextResponse.json({ symbol, date, price, currency, source: "yahoo" })
+
+      return NextResponse.json({ symbol, date, price, currency, source: "yahoo", market })
     }
   }
 

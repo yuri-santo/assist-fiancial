@@ -111,7 +111,7 @@ export async function getHistorico(
 }
 
 export async function searchAtivos(query: string): Promise<{ symbol: string; name: string }[]> {
-  // Common Brazilian tickers as fallback
+  // fallback BR (como você já tinha)
   const commonTickers = [
     { symbol: "PETR4", name: "Petrobras PN" },
     { symbol: "VALE3", name: "Vale ON" },
@@ -135,11 +135,43 @@ export async function searchAtivos(query: string): Promise<{ symbol: string; nam
     { symbol: "LREN3", name: "Lojas Renner ON" },
   ]
 
-  const filtered = commonTickers.filter(
-    (t) => t.symbol.toLowerCase().includes(query.toLowerCase()) || t.name.toLowerCase().includes(query.toLowerCase()),
-  )
-  return filtered.slice(0, 10)
+  const q = query.trim().toLowerCase()
+  const local = commonTickers.filter((t) => t.symbol.toLowerCase().includes(q) || t.name.toLowerCase().includes(q))
+
+  // tenta buscar no server (Yahoo Search via sua rota interna) -> inclui EUA também
+  try {
+    const res = await fetch(`/api/market/search?q=${encodeURIComponent(query)}&limit=10`, { cache: "no-store" })
+    if (res.ok) {
+      const data = await res.json()
+      const results = Array.isArray(data?.results) ? data.results : []
+
+      // mescla + dedupe, priorizando o que veio do Yahoo
+      const merged: { symbol: string; name: string }[] = []
+      const seen = new Set<string>()
+
+      for (const r of results) {
+        if (r?.symbol && !seen.has(r.symbol)) {
+          seen.add(r.symbol)
+          merged.push({ symbol: r.symbol, name: r.name || r.symbol })
+        }
+      }
+      for (const r of local) {
+        if (!seen.has(r.symbol)) {
+          seen.add(r.symbol)
+          merged.push(r)
+        }
+      }
+
+      return merged.slice(0, 10)
+    }
+  } catch {
+    // ignore
+  }
+
+  // fallback final
+  return local.slice(0, 10)
 }
+
 
 export const TIPOS_RENDA_VARIAVEL = {
   acao: {

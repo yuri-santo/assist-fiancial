@@ -244,6 +244,43 @@ const US_STOCKS = new Set([
   "BRK.B",
 ])
 
+
+async function fetchUSDtoBRL(): Promise<number> {
+  // AwesomeAPI (última cotação)
+  try {
+    const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL", {
+      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+      next: { revalidate: 300 },
+    })
+    if (r.ok) {
+      const data = await r.json()
+      const bid = Number(data?.USDBRL?.bid)
+      if (!Number.isNaN(bid) && bid > 0) return bid
+    }
+  } catch {
+    // ignore
+  }
+
+  // exchangerate.host (fallback)
+  try {
+    const r = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=BRL", {
+      signal: AbortSignal.timeout(8000),
+      headers: { Accept: "application/json" },
+      next: { revalidate: 300 },
+    })
+    if (r.ok) {
+      const data = await r.json()
+      const rate = Number(data?.rates?.BRL)
+      if (!Number.isNaN(rate) && rate > 0) return rate
+    }
+  } catch {
+    // ignore
+  }
+
+  return 5.0
+}
+
 function resolveAlias(symbol: string): string {
   const upper = symbol.toUpperCase().replace(/[^A-Z0-9-]/g, "")
   return TICKER_ALIASES[upper] || upper
@@ -456,16 +493,10 @@ export async function GET(request: Request) {
   // Convert currency if needed
   if (currency === "BRL" && quote.currency === "USD") {
     try {
-      const usdResponse = await fetch(`${COINGECKO_API}/simple/price?ids=usd&vs_currencies=brl`, {
-        next: { revalidate: 300 },
-      })
-      if (usdResponse.ok) {
-        const usdData = await usdResponse.json()
-        const usdToBrl = usdData.usd?.brl || 5.0
-        quote.price = quote.price * usdToBrl
-        quote.change = quote.change * usdToBrl
-        quote.currency = "BRL"
-      }
+      const usdToBrl = await fetchUSDtoBRL()
+      quote.price = quote.price * usdToBrl
+      quote.change = quote.change * usdToBrl
+      quote.currency = "BRL"
     } catch {
       // Keep original currency
     }

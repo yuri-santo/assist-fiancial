@@ -2,7 +2,7 @@
 
 import type React from "react"
 
-import { useState, useRef } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -12,7 +12,7 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, CheckCircle } from "lucide-react"
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, CheckCircle, FileText } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -32,9 +32,30 @@ export function ImportButton({ userId }: ImportButtonProps) {
   const [isImporting, setIsImporting] = useState(false)
   const [result, setResult] = useState<ImportResult | null>(null)
   const [preview, setPreview] = useState<any[] | null>(null)
-  const [importType, setImportType] = useState<"despesas" | "receitas" | null>(null)
+  const [importType, setImportType] = useState<"despesas" | "receitas" | "fatura_pdf" | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
+
+  const [pdfFile, setPdfFile] = useState<File | null>(null)
+  const [cartoes, setCartoes] = useState<Array<{ id: string; nome: string; bandeira: string | null }>>([])
+  const [cartaoId, setCartaoId] = useState<string>("")
+  const [replicarParcelas, setReplicarParcelas] = useState(true)
+  const [criarCategorias, setCriarCategorias] = useState(true)
+  const [pdfSummary, setPdfSummary] = useState<{ parsed: number; generated: number; skippedAsDuplicate: number } | null>(null)
   const router = useRouter()
+
+  useEffect(() => {
+    if (!open) return
+    ;(async () => {
+      const supabase = createClient()
+      const { data } = await supabase
+        .from("cartoes")
+        .select("id,nome,bandeira")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+      setCartoes((data as any) || [])
+    })()
+  }, [open, userId])
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>, type: "despesas" | "receitas") => {
     const file = e.target.files?.[0]
@@ -88,6 +109,16 @@ export function ImportButton({ userId }: ImportButtonProps) {
     }
   }
 
+  const handlePdfSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    setImportType("fatura_pdf")
+    setResult(null)
+    setPreview(null)
+    setPdfSummary(null)
+    setPdfFile(file)
+  }
+
   const parseDate = (dateStr: string): string => {
     // Try different date formats
     const formats = [
@@ -114,7 +145,56 @@ export function ImportButton({ userId }: ImportButtonProps) {
   }
 
   const handleImport = async () => {
-    if (!preview || !importType) return
+    if (!importType) return
+
+    // Importação de fatura PDF (server-side)
+    if (importType === "fatura_pdf") {
+      if (!pdfFile) return
+      if (!cartaoId) {
+        setResult({ success: 0, errors: ["Selecione um cartão para importar a fatura."] })
+        return
+      }
+
+      setIsImporting(true)
+      setResult(null)
+
+      try {
+        const form = new FormData()
+        form.append("file", pdfFile)
+        form.append("cartao_id", cartaoId)
+        form.append("replicar_parcelas", replicarParcelas ? "1" : "0")
+        form.append("criar_categorias", criarCategorias ? "1" : "0")
+
+        const res = await fetch("/api/import/cartao-fatura-pdf", {
+          method: "POST",
+          body: form,
+        })
+
+        const data = await res.json().catch(() => ({}))
+        if (!res.ok) {
+          setResult({ success: 0, errors: [data?.error || "Falha ao importar fatura."] })
+        } else {
+          setResult({ success: Number(data.inserted || 0), errors: [] })
+          setPdfSummary({
+            parsed: Number(data.parsed || 0),
+            generated: Number(data.generated || 0),
+            skippedAsDuplicate: Number(data.skippedAsDuplicate || 0),
+          })
+          if (Number(data.inserted || 0) > 0) router.refresh()
+        }
+      } catch (err: any) {
+        setResult({ success: 0, errors: [err?.message || "Falha ao importar fatura."] })
+      } finally {
+        setIsImporting(false)
+        setPdfFile(null)
+        if (pdfInputRef.current) pdfInputRef.current.value = ""
+      }
+
+      return
+    }
+
+    // Importação CSV (client-side)
+    if (!preview) return
 
     setIsImporting(true)
     const supabase = createClient()
@@ -166,8 +246,16 @@ export function ImportButton({ userId }: ImportButtonProps) {
     setPreview(null)
     setResult(null)
     setImportType(null)
+    setPdfFile(null)
+    setPdfSummary(null)
+    setCartaoId("")
+    setReplicarParcelas(true)
+    setCriarCategorias(true)
     if (fileInputRef.current) {
       fileInputRef.current.value = ""
+    }
+    if (pdfInputRef.current) {
+      pdfInputRef.current.value = ""
     }
   }
 
@@ -188,13 +276,13 @@ export function ImportButton({ userId }: ImportButtonProps) {
       <DialogContent className="glass-card border-primary/20 max-w-lg">
         <DialogHeader>
           <DialogTitle className="neon-text">Importar Dados</DialogTitle>
-          <DialogDescription>Importe despesas ou receitas de um arquivo CSV ou Excel</DialogDescription>
+          <DialogDescription>Importe despesas/receitas (CSV/Excel) ou fatura do cartão (PDF)</DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4">
-          {!preview && !result && (
+          {!preview && !result && !pdfFile && (
             <>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="relative">
                   <input
                     type="file"
@@ -223,6 +311,21 @@ export function ImportButton({ userId }: ImportButtonProps) {
                     <p className="text-xs text-muted-foreground mt-1">CSV ou Excel</p>
                   </div>
                 </div>
+
+                <div className="relative">
+                  <input
+                    type="file"
+                    accept="application/pdf,.pdf"
+                    onChange={handlePdfSelect}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                    ref={pdfInputRef}
+                  />
+                  <div className="p-6 rounded-lg border-2 border-dashed border-primary/30 hover:border-primary/50 transition-colors text-center cursor-pointer">
+                    <FileText className="h-8 w-8 mx-auto text-primary mb-2" />
+                    <p className="font-medium">Fatura Cartão (PDF)</p>
+                    <p className="text-xs text-muted-foreground mt-1">PDF (texto selecionável)</p>
+                  </div>
+                </div>
               </div>
 
               <div className="rounded-lg bg-background/30 p-4 border border-primary/10">
@@ -236,6 +339,70 @@ export function ImportButton({ userId }: ImportButtonProps) {
                   </p>
                   <p className="text-xs mt-2">Formatos de data aceitos: DD/MM/YYYY ou YYYY-MM-DD</p>
                 </div>
+              </div>
+            </>
+          )}
+
+          {pdfFile && importType === "fatura_pdf" && !result && (
+            <>
+              <Alert>
+                <FileText className="h-4 w-4" />
+                <AlertDescription>
+                  PDF selecionado: <span className="font-medium">{pdfFile.name}</span>
+                </AlertDescription>
+              </Alert>
+
+              <div className="space-y-3 rounded-lg border border-primary/20 p-4 bg-background/30">
+                <div className="space-y-1">
+                  <p className="text-sm font-medium">Cartão</p>
+                  <select
+                    className="w-full rounded-md bg-background border border-primary/20 px-3 py-2 text-sm"
+                    value={cartaoId}
+                    onChange={(e) => setCartaoId(e.target.value)}
+                  >
+                    <option value="">Selecione...</option>
+                    {cartoes.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.nome}{c.bandeira ? ` (${c.bandeira})` : ""}
+                      </option>
+                    ))}
+                  </select>
+                  {cartoes.length === 0 && (
+                    <p className="text-xs text-muted-foreground">Nenhum cartão cadastrado ainda.</p>
+                  )}
+                </div>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={replicarParcelas}
+                    onChange={(e) => setReplicarParcelas(e.target.checked)}
+                  />
+                  Replicar parcelas (gera 1 despesa por mês)
+                </label>
+
+                <label className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={criarCategorias}
+                    onChange={(e) => setCriarCategorias(e.target.checked)}
+                  />
+                  Criar categorias automaticamente (quando não existir)
+                </label>
+
+                <p className="text-xs text-muted-foreground">
+                  Dica: para melhor resultado, exporte a fatura em PDF com texto selecionável.
+                </p>
+              </div>
+
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={resetState} className="flex-1 bg-transparent">
+                  Cancelar
+                </Button>
+                <Button onClick={handleImport} className="flex-1 neon-glow" disabled={isImporting}>
+                  {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                  Importar
+                </Button>
               </div>
             </>
           )}
@@ -291,6 +458,14 @@ export function ImportButton({ userId }: ImportButtonProps) {
                     {result.success} registros importados com sucesso!
                   </AlertDescription>
                 </Alert>
+              )}
+
+              {pdfSummary && (
+                <div className="text-sm text-muted-foreground rounded-lg border border-primary/10 p-3 bg-background/30">
+                  <p>Itens identificados no PDF: <strong>{pdfSummary.parsed}</strong></p>
+                  <p>Despesas geradas: <strong>{pdfSummary.generated}</strong></p>
+                  <p>Ignoradas por duplicidade: <strong>{pdfSummary.skippedAsDuplicate}</strong></p>
+                </div>
               )}
 
               {result.errors.length > 0 && (
