@@ -4,7 +4,7 @@ import { createClient } from "@/lib/supabase/server"
 import { exchangeCodeForToken } from "@/lib/integrations/mercadopago"
 
 export async function GET(request: Request) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -16,8 +16,9 @@ export async function GET(request: Request) {
   const code = searchParams.get("code")
   const state = searchParams.get("state")
 
-  const expectedState = cookies().get("mp_oauth_state")?.value
-  cookies().delete("mp_oauth_state")
+  const cookieStore = await cookies()
+  const expectedState = cookieStore.get("mp_oauth_state")?.value
+  cookieStore.delete("mp_oauth_state")
 
   if (!code) return NextResponse.redirect(new URL("/dashboard/integracoes?error=missing_code", baseUrl))
   if (!state || !expectedState || state !== expectedState) {
@@ -25,6 +26,7 @@ export async function GET(request: Request) {
   }
 
   try {
+    // Troca code -> access_token via /oauth/token :contentReference[oaicite:0]{index=0}
     const token = await exchangeCodeForToken(code)
     const expiresAt = token.expires_in ? new Date(Date.now() + token.expires_in * 1000).toISOString() : null
 

@@ -10,7 +10,7 @@ function toIsoDate(d: Date) {
 }
 
 export async function POST(request: Request) {
-  const supabase = createClient()
+  const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
@@ -27,7 +27,6 @@ export async function POST(request: Request) {
   const begin = new Date()
   begin.setDate(end.getDate() - days)
 
-  // Mercado Pago espera ISO datetime.
   const beginDate = `${toIsoDate(begin)}T00:00:00.000-00:00`
   const endDate = `${toIsoDate(end)}T23:59:59.999-00:00`
 
@@ -50,7 +49,7 @@ export async function POST(request: Request) {
   let accessToken = String(conn.access_token)
   const expiresAt = conn.expires_at ? new Date(conn.expires_at).getTime() : null
 
-  // refresh se expirado (se existir refresh_token)
+  // refresh se expirado (se existir refresh_token) :contentReference[oaicite:1]{index=1}
   if (expiresAt && expiresAt <= Date.now() && conn.refresh_token) {
     try {
       const token = await refreshAccessToken(String(conn.refresh_token))
@@ -86,9 +85,8 @@ export async function POST(request: Request) {
         const occurred = p.date_approved || p.date_created || now
         const occurredDate = occurred.slice(0, 10)
 
-        // MVP: assume debit por padrão; o usuário pode ajustar na mini-planilha antes de importar.
+        // MVP: entra como gasto; você ajusta na mini planilha antes de importar.
         const direction: "debit" | "credit" = "debit"
-
         const description = p.description || p.statement_descriptor || p.payment_method_id || `Pagamento ${p.id}`
 
         return {
