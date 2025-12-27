@@ -5,10 +5,12 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { TrendingUp, Calendar, Percent, Building, Info, LineChart } from "lucide-react"
+import { TrendingUp, Calendar, Percent, Building, Info, LineChart, RefreshCcw } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
 import { TIPOS_RENDA_FIXA, INDEXADORES } from "@/lib/api/brapi"
 import type { RendaFixa } from "@/lib/types"
+import { Button } from "@/components/ui/button"
+import { ReinvestRendaFixaDialog } from "./reinvest-renda-fixa-dialog"
 import { XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Area, AreaChart } from "recharts"
 
 interface RendaFixaDetailDialogProps {
@@ -83,6 +85,7 @@ function gerarProjecaoVencimento(investimento: RendaFixa) {
 
 export function RendaFixaDetailDialog({ investimento, open, onOpenChange }: RendaFixaDetailDialogProps) {
   const [activeTab, setActiveTab] = useState("evolucao")
+  const [isReinvestOpen, setIsReinvestOpen] = useState(false)
 
   const tipoInfo = TIPOS_RENDA_FIXA[investimento.tipo as keyof typeof TIPOS_RENDA_FIXA]
   const indexadorInfo = investimento.indexador ? INDEXADORES[investimento.indexador as keyof typeof INDEXADORES] : null
@@ -94,7 +97,8 @@ export function RendaFixaDetailDialog({ investimento, open, onOpenChange }: Rend
   const rendimentoPercent = investimento.valor_investido > 0 ? (rendimento / investimento.valor_investido) * 100 : 0
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] sm:max-w-3xl max-h-[95vh] glass-card border-primary/20 flex flex-col p-0">
         <DialogHeader className="flex-shrink-0 px-6 pt-6">
           <DialogTitle className="flex items-center gap-3 flex-wrap">
@@ -110,6 +114,17 @@ export function RendaFixaDetailDialog({ investimento, open, onOpenChange }: Rend
                 <Building className="h-3 w-3 shrink-0" />
                 <span className="truncate">{investimento.instituicao}</span>
               </p>
+            </div>
+            <div className="ml-auto">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-2 border-primary/30 bg-transparent"
+                onClick={() => setIsReinvestOpen(true)}
+              >
+                <RefreshCcw className="h-4 w-4" />
+                Reinvestir
+              </Button>
             </div>
           </DialogTitle>
         </DialogHeader>
@@ -295,5 +310,8 @@ export function RendaFixaDetailDialog({ investimento, open, onOpenChange }: Rend
         </div>
       </DialogContent>
     </Dialog>
+
+    <ReinvestRendaFixaDialog investimento={investimento} open={isReinvestOpen} onOpenChange={setIsReinvestOpen} />
+    </>
   )
 }

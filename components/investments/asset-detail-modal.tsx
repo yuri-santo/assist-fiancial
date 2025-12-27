@@ -29,11 +29,13 @@ import {
   Wallet,
   Target,
   BarChart3,
+  RefreshCcw,
 } from "lucide-react"
 import { TIPOS_RENDA_VARIAVEL } from "@/lib/api/brapi"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
+import { ReinvestRendaVariavelDialog } from "./reinvest-renda-variavel-dialog"
 
 interface AssetDetailModalProps {
   ativo: RendaVariavel & {
@@ -65,6 +67,7 @@ export function AssetDetailModal({ ativo, open, onOpenChange }: AssetDetailModal
   const [newPrecoMedio, setNewPrecoMedio] = useState(ativo.preco_medio.toString())
   const [newDataCompra, setNewDataCompra] = useState(ativo.data_compra || "")
   const [isSaving, setIsSaving] = useState(false)
+  const [isReinvestOpen, setIsReinvestOpen] = useState(false)
 
   useEffect(() => {
     if (open && activeTab === "indicadores") {
@@ -116,25 +119,39 @@ export function AssetDetailModal({ ativo, open, onOpenChange }: AssetDetailModal
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-[95vw] sm:max-w-4xl max-h-[95vh] overflow-hidden border-primary/20 bg-background flex flex-col">
         <DialogHeader className="flex-shrink-0">
-          <DialogTitle className="text-primary flex items-center gap-3">
+          <DialogTitle className="text-primary flex items-center gap-3 justify-between">
             <div
               className="w-10 h-10 rounded-lg flex items-center justify-center text-sm font-bold"
               style={{ backgroundColor: `${tipo?.color}20`, color: tipo?.color }}
             >
               {ativo.ticker.slice(0, 2)}
             </div>
-            <div>
-              <span className="text-xl">{ativo.ticker}</span>
-              <Badge
-                variant="outline"
-                className="ml-2 text-xs"
-                style={{ borderColor: tipo?.color, color: tipo?.color }}
-              >
-                {tipo?.label}
-              </Badge>
+            <div className="flex items-center gap-2 flex-1">
+              <div>
+                <span className="text-xl">{ativo.ticker}</span>
+                <Badge
+                  variant="outline"
+                  className="ml-2 text-xs"
+                  style={{ borderColor: tipo?.color, color: tipo?.color }}
+                >
+                  {tipo?.label}
+                </Badge>
+              </div>
+              <div className="ml-auto">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="gap-2 border-primary/30 bg-transparent"
+                  onClick={() => setIsReinvestOpen(true)}
+                >
+                  <RefreshCcw className="h-4 w-4" />
+                  Reinvestir
+                </Button>
+              </div>
             </div>
           </DialogTitle>
           <DialogDescription>
@@ -423,6 +440,9 @@ export function AssetDetailModal({ ativo, open, onOpenChange }: AssetDetailModal
           </Tabs>
         </div>
       </DialogContent>
-    </Dialog>
+      </Dialog>
+
+      <ReinvestRendaVariavelDialog ativo={ativo} open={isReinvestOpen} onOpenChange={setIsReinvestOpen} />
+    </>
   )
 }

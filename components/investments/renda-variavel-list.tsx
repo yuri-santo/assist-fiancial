@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Trash2, TrendingUp, TrendingDown, Loader2, Eye } from "lucide-react"
+import { Trash2, TrendingUp, TrendingDown, Loader2, Eye, PlusCircle } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
 import { TIPOS_RENDA_VARIAVEL } from "@/lib/api/brapi"
 import type { RendaVariavel } from "@/lib/types"
@@ -23,6 +23,7 @@ import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { AssetDetailModal } from "./asset-detail-modal"
+import { ReinvestRendaVariavelDialog } from "./reinvest-renda-variavel-dialog"
 
 interface RendaVariavelListProps {
   ativos: RendaVariavel[]
@@ -34,6 +35,8 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
   const router = useRouter()
   const [selectedAtivo, setSelectedAtivo] = useState<RendaVariavel | null>(null)
   const [isDetailOpen, setIsDetailOpen] = useState(false)
+  const [reinvestAtivo, setReinvestAtivo] = useState<RendaVariavel | null>(null)
+  const [isReinvestOpen, setIsReinvestOpen] = useState(false)
 
   const handleDelete = async () => {
     if (!deleteId) return
@@ -171,6 +174,18 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => {
+                                setReinvestAtivo(ativo)
+                                setIsReinvestOpen(true)
+                              }}
+                              className="text-muted-foreground hover:text-primary hover:bg-primary/10"
+                              title="Reinvestir / Aportar"
+                            >
+                              <PlusCircle className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={(e) => {
                                 e.stopPropagation()
                                 setDeleteId(ativo.id)
@@ -192,6 +207,17 @@ export function RendaVariavelList({ ativos }: RendaVariavelListProps) {
       </motion.div>
 
       {selectedAtivo && <AssetDetailModal ativo={selectedAtivo} open={isDetailOpen} onOpenChange={setIsDetailOpen} />}
+
+      {reinvestAtivo && (
+        <ReinvestRendaVariavelDialog
+          open={isReinvestOpen}
+          onOpenChange={(o) => {
+            setIsReinvestOpen(o)
+            if (!o) setReinvestAtivo(null)
+          }}
+          ativo={reinvestAtivo}
+        />
+      )}
 
       <AlertDialog open={!!deleteId} onOpenChange={() => setDeleteId(null)}>
         <AlertDialogContent className="glass-card border-primary/20 z-[101]">

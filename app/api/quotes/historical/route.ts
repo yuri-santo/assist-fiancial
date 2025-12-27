@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { fetchWithTimeout } from "@/lib/utils/fetch-timeout"
 
 const YAHOO_FINANCE_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 const COINGECKO_API = "https://api.coingecko.com/api/v3"
@@ -103,11 +104,14 @@ async function fetchUSDtoBRL(date?: string): Promise<number> {
   // 1) exchangerate.host (tem endpoint por data)
   try {
     const baseUrl = date ? `https://api.exchangerate.host/${date}` : "https://api.exchangerate.host/latest"
-    const r = await fetch(`${baseUrl}?base=USD&symbols=BRL`, {
-      signal: AbortSignal.timeout(8000),
-      headers: { Accept: "application/json" },
-      next: { revalidate: 60 * 60 },
-    })
+    const r = await fetchWithTimeout(
+      `${baseUrl}?base=USD&symbols=BRL`,
+      {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 60 * 60 },
+      },
+      8000
+    )
     if (r.ok) {
       const data = await r.json()
       const rate = Number(data?.rates?.BRL)
@@ -119,11 +123,14 @@ async function fetchUSDtoBRL(date?: string): Promise<number> {
 
   // 2) AwesomeAPI (última cotação)
   try {
-    const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL", {
-      signal: AbortSignal.timeout(8000),
-      headers: { Accept: "application/json" },
-      next: { revalidate: 60 * 60 },
-    })
+    const r = await fetchWithTimeout(
+      "https://economia.awesomeapi.com.br/json/last/USD-BRL",
+      {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 60 * 60 },
+      },
+      8000
+    )
     if (r.ok) {
       const data = await r.json()
       const bid = Number(data?.USDBRL?.bid)
@@ -158,10 +165,13 @@ async function fetchCryptoHistorical(symbol: string, date: string, currency: "BR
     const vs = currency.toLowerCase()
     const url = `${COINGECKO_API}/coins/${coinId}/market_chart/range?vs_currency=${vs}&from=${start}&to=${end}`
 
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(10000),
-      next: { revalidate: 60 * 60 },
-    })
+    const response = await fetchWithTimeout(
+      url,
+      {
+        next: { revalidate: 60 * 60 },
+      },
+      10000
+    )
 
     if (response.ok) {
       const data = await response.json()
@@ -181,10 +191,13 @@ async function fetchCryptoHistorical(symbol: string, date: string, currency: "BR
 
     const url = `${COINGECKO_API}/coins/${coinId}/history?date=${formattedDate}`
 
-    const response = await fetch(url, {
-      signal: AbortSignal.timeout(10000),
-      next: { revalidate: 60 * 60 },
-    })
+    const response = await fetchWithTimeout(
+      url,
+      {
+        next: { revalidate: 60 * 60 },
+      },
+      10000
+    )
 
     if (!response.ok) return null
 
@@ -214,14 +227,17 @@ async function fetchStockHistorical(symbol: string, date: string, suffix = ""): 
     // interval 1d + period1/period2 tende a ser mais preciso e rápido
     const url = `${YAHOO_FINANCE_BASE}/${symbol}${suffix}?interval=1d&period1=${period1}&period2=${period2}`
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Accept: "application/json",
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Accept: "application/json",
+        },
+        next: { revalidate: 60 * 60 },
       },
-      signal: AbortSignal.timeout(10000),
-      next: { revalidate: 60 * 60 },
-    })
+      10000
+    )
 
     if (!response.ok) return null
 

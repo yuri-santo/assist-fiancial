@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import { fetchWithTimeout } from "@/lib/utils/fetch-timeout"
 
 const YAHOO_FINANCE_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 const BRAPI_BASE_URL = "https://brapi.dev/api"
@@ -248,11 +249,14 @@ const US_STOCKS = new Set([
 async function fetchUSDtoBRL(): Promise<number> {
   // AwesomeAPI (última cotação)
   try {
-    const r = await fetch("https://economia.awesomeapi.com.br/json/last/USD-BRL", {
-      signal: AbortSignal.timeout(8000),
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300 },
-    })
+    const r = await fetchWithTimeout(
+      "https://economia.awesomeapi.com.br/json/last/USD-BRL",
+      {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 300 },
+      },
+      8000
+    )
     if (r.ok) {
       const data = await r.json()
       const bid = Number(data?.USDBRL?.bid)
@@ -264,11 +268,14 @@ async function fetchUSDtoBRL(): Promise<number> {
 
   // exchangerate.host (fallback)
   try {
-    const r = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=BRL", {
-      signal: AbortSignal.timeout(8000),
-      headers: { Accept: "application/json" },
-      next: { revalidate: 300 },
-    })
+    const r = await fetchWithTimeout(
+      "https://api.exchangerate.host/latest?base=USD&symbols=BRL",
+      {
+        headers: { Accept: "application/json" },
+        next: { revalidate: 300 },
+      },
+      8000
+    )
     if (r.ok) {
       const data = await r.json()
       const rate = Number(data?.rates?.BRL)
@@ -294,10 +301,13 @@ async function fetchCrypto(symbol: string, currency: "BRL" | "USD"): Promise<Quo
     const vsCurrency = currency.toLowerCase()
     const url = `${COINGECKO_API}/simple/price?ids=${coinId}&vs_currencies=${vsCurrency}&include_24hr_change=true`
 
-    const response = await fetch(url, {
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(5000),
-    })
+    const response = await fetchWithTimeout(
+      url,
+      {
+        next: { revalidate: 60 },
+      },
+      5000
+    )
 
     if (!response.ok) return null
 
@@ -328,14 +338,17 @@ async function fetchFromYahoo(symbol: string, suffix = ""): Promise<QuoteResult 
   try {
     const url = `${YAHOO_FINANCE_BASE}/${symbol}${suffix}?interval=1d&range=1d`
 
-    const response = await fetch(url, {
-      headers: {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        Accept: "application/json",
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          Accept: "application/json",
+        },
+        next: { revalidate: 60 },
       },
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(8000),
-    })
+      8000
+    )
 
     if (!response.ok) return null
 
@@ -377,11 +390,14 @@ async function fetchFromBrapi(symbol: string): Promise<QuoteResult | null> {
       headers.Authorization = `Bearer ${BRAPI_TOKEN}`
     }
 
-    const response = await fetch(url, {
-      headers,
-      next: { revalidate: 60 },
-      signal: AbortSignal.timeout(5000),
-    })
+    const response = await fetchWithTimeout(
+      url,
+      {
+        headers,
+        next: { revalidate: 60 },
+      },
+      5000
+    )
 
     if (!response.ok) return null
 

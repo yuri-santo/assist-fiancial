@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server"
 import { getUnifiedQuote } from "@/lib/api/unified-quote-service"
+import { fetchWithTimeout } from "@/lib/utils/fetch-timeout"
 
 export const runtime = "nodejs"
 
@@ -14,7 +15,7 @@ async function resolveYahooSymbol(query: string): Promise<string | null> {
     if (!q) return null
 
     const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=1&newsCount=0`
-    const res = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(8000) })
+    const res = await fetchWithTimeout(url, { cache: "no-store" }, 8000)
     if (!res.ok) return null
     const data = await res.json()
     const symbol = data?.quotes?.[0]?.symbol

@@ -1,5 +1,8 @@
 // Serviço para buscar ações americanas via API route
 
+import { getAppBaseUrl } from "./base-url"
+import { fetchWithTimeout } from "@/lib/utils/fetch-timeout"
+
 export interface USStockQuote {
   symbol: string
   name: string
@@ -16,13 +19,7 @@ export interface USStockQuote {
 }
 
 function getBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    return ""
-  }
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-  )
+  return getAppBaseUrl()
 }
 
 const stockCache = new Map<string, { data: USStockQuote; timestamp: number }>()
@@ -38,10 +35,13 @@ export async function getUSStockQuote(symbol: string): Promise<USStockQuote | nu
     const baseUrl = getBaseUrl()
     const url = `${baseUrl}/api/quotes?symbol=${encodeURIComponent(symbol)}&type=stock`
 
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10000),
-    })
+    const response = await fetchWithTimeout(
+      url,
+      {
+        cache: "no-store",
+      },
+      10_000
+    )
 
     if (!response.ok) return null
 

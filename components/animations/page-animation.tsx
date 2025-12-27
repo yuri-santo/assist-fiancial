@@ -22,6 +22,8 @@ type PageType =
   | "investimentos"
   | "relatorios"
   | "orcamento"
+  | "integracoes"
+  | "configuracoes"
 
 interface PageAnimationProps {
   type: PageType
@@ -69,10 +71,21 @@ const pageConfigs: Record<PageType, { component: React.ReactNode; title: string 
     component: <ChartAnimation type="line" trend="neutral" />,
     title: "Planejando seus gastos",
   },
+
+  // Páginas de configuração / integrações
+  integracoes: {
+    component: <WalletAnimation type="neutral" size="lg" />,
+    title: "Conectando suas contas",
+  },
+  configuracoes: {
+    component: <ShieldAnimation status="safe" size="lg" />,
+    title: "Ajustando preferências",
+  },
 }
 
 export function PageAnimation({ type, className = "" }: PageAnimationProps) {
-  const config = pageConfigs[type]
+  // Em runtime, protege contra `type` inválido (evita crash do dashboard)
+  const config = pageConfigs[type] ?? pageConfigs.dashboard
 
   return (
     <AnimatePresence>

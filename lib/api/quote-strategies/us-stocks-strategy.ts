@@ -63,7 +63,7 @@ export class USStocksStrategy implements QuoteStrategy {
 
       if (!data.c || data.c === 0) return null
 
-      console.log(`[v0] [Finnhub] Success: ${symbol} = $${data.c}`)
+      console.log(`[Finnhub] Success: ${symbol} = $${data.c}`)
 
       return {
         symbol: symbol.toUpperCase(),
@@ -76,7 +76,7 @@ export class USStocksStrategy implements QuoteStrategy {
         timestamp: Date.now(),
       }
     } catch (error) {
-      console.error(`[v0] [Finnhub] Error:`, error)
+      console.error(`[Finnhub] Error:`, error)
       return null
     }
   }
@@ -85,7 +85,7 @@ export class USStocksStrategy implements QuoteStrategy {
     if (!TWELVE_DATA_KEY) return null
 
     try {
-      console.log(`[v0] [Twelve Data] Trying ${symbol}`)
+      console.log(`[Twelve Data] Trying ${symbol}`)
       const url = `https://api.twelvedata.com/quote?symbol=${symbol}&apikey=${TWELVE_DATA_KEY}`
 
       const response = await fetch(url, {
@@ -99,7 +99,7 @@ export class USStocksStrategy implements QuoteStrategy {
 
       if (!data.close || data.code === 429) return null
 
-      console.log(`[v0] [Twelve Data] Success: ${symbol} = $${data.close}`)
+      console.log(`[Twelve Data] Success: ${symbol} = $${data.close}`)
 
       return {
         symbol: data.symbol,
@@ -112,7 +112,7 @@ export class USStocksStrategy implements QuoteStrategy {
         timestamp: Date.now(),
       }
     } catch (error) {
-      console.error(`[v0] [Twelve Data] Error:`, error)
+      console.error(`[Twelve Data] Error:`, error)
       return null
     }
   }
@@ -121,7 +121,7 @@ export class USStocksStrategy implements QuoteStrategy {
     if (!ALPHA_VANTAGE_KEY) return null
 
     try {
-      console.log(`[v0] [Alpha Vantage] Trying ${symbol}`)
+      console.log(`[Alpha Vantage] Trying ${symbol}`)
       const url = `https://www.alphavantage.co/query?function=GLOBAL_QUOTE&symbol=${symbol}&apikey=${ALPHA_VANTAGE_KEY}`
 
       const response = await fetch(url, {
@@ -136,7 +136,7 @@ export class USStocksStrategy implements QuoteStrategy {
 
       if (!quote || !quote["05. price"]) return null
 
-      console.log(`[v0] [Alpha Vantage] Success: ${symbol} = $${quote["05. price"]}`)
+      console.log(`[Alpha Vantage] Success: ${symbol} = $${quote["05. price"]}`)
 
       return {
         symbol: quote["01. symbol"],
@@ -149,7 +149,7 @@ export class USStocksStrategy implements QuoteStrategy {
         timestamp: Date.now(),
       }
     } catch (error) {
-      console.error(`[v0] [Alpha Vantage] Error:`, error)
+      console.error(`[Alpha Vantage] Error:`, error)
       return null
     }
   }
@@ -194,7 +194,7 @@ export class USStocksStrategy implements QuoteStrategy {
         }
       }
     } catch (error) {
-      console.log("[v0] [US Stocks] USD/BRL fallback")
+      console.log("[US Stocks] USD/BRL fallback")
     }
     return 5.8
   }

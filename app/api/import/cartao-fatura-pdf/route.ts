@@ -3,6 +3,7 @@ import { NextResponse } from "next/server"
 import crypto from "node:crypto"
 import { createRequire } from "node:module"
 import { createClient } from "@/lib/supabase/server"
+import { parsePdfFaturaTextToItems } from "@/lib/import/pdfFaturaParser"
 
 export const runtime = "nodejs"
 export const dynamic = "force-dynamic"
@@ -49,6 +50,39 @@ function pickFile(form: FormData, keys: string[]) {
     if (v instanceof File) return v
   }
   return null
+}
+
+function pickJson<T = any>(form: FormData, keys: string[]): T | null {
+  const raw = pickString(form, keys)
+  if (!raw) return null
+  try {
+    return JSON.parse(raw) as T
+  } catch {
+    return null
+  }
+}
+
+function isValidISODate(d: string) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(d)
+}
+
+function sanitizeItem(x: any): ParsedItem | null {
+  if (!x || typeof x !== "object") return null
+  const dataISO = String(x.dataISO || x.data || "").trim()
+  const descricao = String(x.descricao || "").trim()
+  const valor = typeof x.valor === "number" ? x.valor : safeToNumberBR(String(x.valor ?? ""))
+  if (!isValidISODate(dataISO) || !descricao || valor == null) return null
+  const parcela_atual = x.parcela_atual == null ? null : Number(x.parcela_atual)
+  const parcela_total = x.parcela_total == null ? null : Number(x.parcela_total)
+  const categoria_sugerida = x.categoria_sugerida ? String(x.categoria_sugerida) : null
+  return {
+    dataISO,
+    descricao,
+    valor,
+    parcela_atual: Number.isFinite(parcela_atual as any) ? (parcela_atual as number) : null,
+    parcela_total: Number.isFinite(parcela_total as any) ? (parcela_total as number) : null,
+    categoria_sugerida,
+  }
 }
 
 function listFormKeys(form: FormData) {
@@ -132,51 +166,18 @@ function guessCategoria(desc: string) {
   return null
 }
 
-function parseLinesToItems(text: string, yearHint?: number) {
-  const lines = text
-    .split("\n")
-    .map((l) => normalizeText(l))
-    .filter(Boolean)
-
+function parseLinesToItems(text: string) {
+  const base = parsePdfFaturaTextToItems(text)
   const items: ParsedItem[] = []
-  const year = yearHint ?? new Date().getFullYear()
 
-  for (const line of lines) {
-    // Ex: "12/12 SUPERMERCADO ABC 123,45"
-    // Ex: "12/12 LOJA XYZ 02/10 45,67"
-    // Ex: "12/12 PAGAMENTO RECEBIDO -123,45" (crédito/estorno)
-    const m = line.match(
-      /^(\d{2})\/(\d{2})(?:\/(\d{2,4}))?\s+(.+?)\s+(-?\s*(?:R\$)?\s*\d[\d\.]*,\d{2})$/
-    )
-    if (!m) continue
-
-    const dd = Number(m[1])
-    const mm = Number(m[2])
-    const yyRaw = m[3]
-    const descRaw = m[4]?.trim() ?? ""
-    const valRaw = m[5]?.trim() ?? ""
-
-    if (!(dd >= 1 && dd <= 31 && mm >= 1 && mm <= 12)) continue
-
-    const y =
-      yyRaw && yyRaw.length
-        ? yyRaw.length === 2
-          ? 2000 + Number(yyRaw)
-          : Number(yyRaw)
-        : year
-
-    const valor = safeToNumberBR(valRaw)
-    if (valor == null) continue
-
-    const inst = detectInstallments(descRaw)
-    const categoria = guessCategoria(descRaw)
-
-    const dataISO = `${String(y).padStart(4, "0")}-${String(mm).padStart(2, "0")}-${String(dd).padStart(2, "0")}`
-
+  for (const it of base) {
+    const desc = it.description.replace(/\s+/g, " ").trim()
+    const inst = detectInstallments(desc)
+    const categoria = guessCategoria(desc)
     items.push({
-      dataISO,
-      descricao: descRaw.replace(/\s+/g, " ").trim(),
-      valor,
+      dataISO: it.date,
+      descricao: desc,
+      valor: it.amount,
       parcela_atual: inst?.atual ?? null,
       parcela_total: inst?.total ?? null,
       categoria_sugerida: categoria,
@@ -209,10 +210,18 @@ export async function POST(req: Request) {
     const file = pickFile(form, ["file", "pdf", "fatura", "arquivo", "document"])
     const cartao_id = pickString(form, ["cartao_id", "cartaoId", "card_id", "cardId", "cartao", "card"])
 
+    // Fluxos adicionais:
+    // - OCR client-side: o frontend pode enviar o texto via "ocr_text".
+    // - Preview/edição: frontend pode pedir dry_run=1 para receber itens sem inserir.
+    // - Confirmação: frontend pode enviar items_json com a lista já ajustada.
+    const ocr_text = pickString(form, ["ocr_text", "ocrText", "text", "extracted_text"])
+    const dry_run = pickBool(form, ["dry_run", "dryRun", "preview"], false)
+    const items_json = pickJson<any[]>(form, ["items_json", "itemsJson", "items"]) // lista de itens ajustados
+
     const replicar_parcelas = pickBool(form, ["replicar_parcelas", "replicarParcelas"], true)
     const criar_categorias = pickBool(form, ["criar_categorias", "criarCategorias"], true)
 
-    if (!file || !cartao_id) {
+    if ((!file && !ocr_text && !items_json) || !cartao_id) {
       return NextResponse.json(
         {
           ok: false,
@@ -220,10 +229,13 @@ export async function POST(req: Request) {
           expected: {
             file: ["file (recomendado)", "pdf", "fatura", "arquivo"],
             cartao_id: ["cartao_id (recomendado)", "cartaoId", "cardId"],
+            alternative: ["ocr_text (texto extraído por OCR)", "items_json (lista de lançamentos)"]
           },
           receivedKeys,
           hints: [
             "No frontend, use FormData e faça: formData.append('file', arquivoPDF) e formData.append('cartao_id', cartaoIdSelecionado).",
+            "Se o PDF for imagem/escaneado, rode OCR no navegador e envie como formData.append('ocr_text', textoExtraido).",
+            "Para permitir revisão do usuário, primeiro chame com dry_run=1 e depois envie items_json confirmados.",
           ],
         },
         { status: 400 }
@@ -240,42 +252,87 @@ export async function POST(req: Request) {
       return NextResponse.json({ ok: false, error: "Não autenticado." }, { status: 401 })
     }
 
-    const buf = Buffer.from(await file.arrayBuffer())
+    // 1) obtém texto (PDF -> texto) OU usa OCR enviado pelo cliente
+    let pdfText = ""
+    if (items_json && Array.isArray(items_json)) {
+      // pular extração/parsing: já veio a lista pronta
+      pdfText = ""
+    } else if (ocr_text && ocr_text.length >= 10) {
+      pdfText = normalizeText(ocr_text)
+    } else {
+      const buf = Buffer.from(await (file as File).arrayBuffer())
+      pdfText = await extractPdfText(buf)
+    }
 
-    // 1) extrai texto do PDF
-    const pdfText = await extractPdfText(buf)
-
-    if (!pdfText || pdfText.length < 20) {
+    if ((!items_json || !Array.isArray(items_json)) && (!pdfText || pdfText.length < 20)) {
       // MUITO comum em faturas escaneadas (imagem): sem OCR não tem como “ler”
       return NextResponse.json(
         {
           ok: false,
+          needsOcr: true,
           error:
-            "Não foi possível extrair texto do PDF. Ele parece ser uma imagem/escaneado (sem texto selecionável). Para esse tipo de fatura, você precisa de OCR.",
+            "Não foi possível extrair texto do PDF. Ele parece ser uma imagem/escaneado (sem texto selecionável).",
           suggestion:
-            "Tente exportar o PDF diretamente do app/banco (não como foto) ou habilitar OCR no pipeline (ex.: Tesseract, Google Vision, etc.).",
+            "Rode OCR no navegador (tesseract.js) e reenvie como ocr_text, ou exporte o PDF diretamente do app/banco (não como foto).",
         },
         { status: 422 }
       )
     }
 
-    // 2) parseia linhas em lançamentos
-    const items = parseLinesToItems(pdfText)
+    // 2) parseia linhas em lançamentos (ou usa lista já enviada)
+    const items: ParsedItem[] = Array.isArray(items_json)
+      ? (items_json.map(sanitizeItem).filter(Boolean) as ParsedItem[])
+      : parseLinesToItems(pdfText)
 
     if (items.length === 0) {
+      // Se ainda não tentou OCR, força o fluxo de OCR do frontend.
+      // Muitos PDFs “texto selecionável” vêm com colunas quebradas e o OCR (imagem) acaba ficando melhor para o parser.
+      if (!ocr_text) {
+        return NextResponse.json(
+          {
+            ok: false,
+            needsOcr: true,
+            reason: "no_items",
+            error:
+              "Texto extraído, mas não consegui identificar lançamentos no formato esperado. Vou tentar OCR (imagem) para melhorar a estrutura.",
+            debug: {
+              extractedTextPreview: pdfText.slice(0, 1200),
+            },
+          },
+          { status: 422 }
+        )
+      }
+
+      // Já veio via OCR (ou o usuário colou) e mesmo assim não achou: libera modo manual
+      if (dry_run) {
+        return NextResponse.json({
+          ok: true,
+          mode: "preview",
+          parsed: 0,
+          items: [],
+          needsManual: true,
+          rawText: pdfText.slice(0, 5000),
+        })
+      }
+
       return NextResponse.json(
         {
           ok: false,
           error:
-            "Texto extraído, mas não consegui identificar lançamentos no formato esperado (data/descrição/valor).",
-          debug: {
-            extractedTextPreview: pdfText.slice(0, 1200),
-          },
-          hint:
-            "Me mande um trecho do texto extraído (sem dados sensíveis) que eu ajusto o parser pro layout exato do seu banco/cartão.",
+            "Não consegui identificar lançamentos automaticamente. Use o modo de pré-visualização (dry_run=1) para ajustar manualmente e reenviar items_json.",
         },
         { status: 422 }
       )
+    }
+
+    // 2.1) preview (sem inserir) — usado para UI de "mini planilha"
+    if (dry_run) {
+      return NextResponse.json({
+        ok: true,
+        mode: "preview",
+        parsed: items.length,
+        items,
+      })
     }
 
     // 3) garante categorias (opcional)

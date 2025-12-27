@@ -12,11 +12,17 @@ import {
   DialogTrigger,
   DialogDescription,
 } from "@/components/ui/dialog"
-import { Upload, FileSpreadsheet, Loader2, AlertCircle, CheckCircle, FileText } from "lucide-react"
+import { Upload, FileSpreadsheet, Loader2, AlertCircle, CheckCircle, FileText, Wand2, Plus, Trash2 } from "lucide-react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { Switch } from "@/components/ui/switch"
+import { Progress } from "@/components/ui/progress"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { ocrPdfFileToText } from "@/lib/ocr/pdfOcr"
 
 interface ImportButtonProps {
   userId: string
@@ -25,6 +31,15 @@ interface ImportButtonProps {
 interface ImportResult {
   success: number
   errors: string[]
+}
+
+type PdfItem = {
+  dataISO: string
+  descricao: string
+  valor: number
+  parcela_atual?: number | null
+  parcela_total?: number | null
+  categoria_sugerida?: string | null
 }
 
 export function ImportButton({ userId }: ImportButtonProps) {
@@ -41,6 +56,13 @@ export function ImportButton({ userId }: ImportButtonProps) {
   const [cartaoId, setCartaoId] = useState<string>("")
   const [replicarParcelas, setReplicarParcelas] = useState(true)
   const [criarCategorias, setCriarCategorias] = useState(true)
+  const [pdfItems, setPdfItems] = useState<any[] | null>(null)
+  const [pdfNeedsManual, setPdfNeedsManual] = useState(false)
+  const [pdfRawText, setPdfRawText] = useState<string | null>(null)
+  const [pdfStage, setPdfStage] = useState<"select" | "preview" | "importing">("select")
+  const [isOcring, setIsOcring] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(0)
+  const [autoOcr, setAutoOcr] = useState(true)
   const [pdfSummary, setPdfSummary] = useState<{ parsed: number; generated: number; skippedAsDuplicate: number } | null>(null)
   const router = useRouter()
 
@@ -117,6 +139,8 @@ export function ImportButton({ userId }: ImportButtonProps) {
     setPreview(null)
     setPdfSummary(null)
     setPdfFile(file)
+    setPdfItems(null)
+    setPdfStage("select")
   }
 
   const parseDate = (dateStr: string): string => {
@@ -144,52 +168,110 @@ export function ImportButton({ userId }: ImportButtonProps) {
     return new Date().toISOString().split("T")[0]
   }
 
-  const handleImport = async () => {
-    if (!importType) return
+  const analyzePdf = async (opts?: { ocrText?: string }) => {
+    if (!pdfFile) return
+    if (!cartaoId) {
+      setResult({ success: 0, errors: ["Selecione um cartão para importar a fatura."] })
+      return
+    }
 
-    // Importação de fatura PDF (server-side)
-    if (importType === "fatura_pdf") {
-      if (!pdfFile) return
-      if (!cartaoId) {
-        setResult({ success: 0, errors: ["Selecione um cartão para importar a fatura."] })
+    setIsImporting(true)
+    setResult(null)
+
+    try {
+      const form = new FormData()
+      form.append("file", pdfFile)
+      form.append("cartao_id", cartaoId)
+      form.append("replicar_parcelas", replicarParcelas ? "1" : "0")
+      form.append("criar_categorias", criarCategorias ? "1" : "0")
+      form.append("dry_run", "1")
+      if (opts?.ocrText) form.append("ocr_text", opts.ocrText)
+
+      const res = await fetch("/api/import/cartao-fatura-pdf", { method: "POST", body: form })
+      const data = await res.json().catch(() => ({}))
+
+      if (!res.ok) {
+        // OCR necessário
+        if (res.status === 422 && data?.needsOcr && autoOcr) {
+          setIsImporting(false)
+          setIsOcring(true)
+          setOcrProgress(0)
+          try {
+            const text = await ocrPdfFileToText(pdfFile, (p) => setOcrProgress(Math.round(p * 100)))
+            setIsOcring(false)
+            setOcrProgress(100)
+            // reanalisar com o texto do OCR
+            await analyzePdf({ ocrText: text })
+            return
+          } catch (e: any) {
+            setIsOcring(false)
+            setResult({ success: 0, errors: [e?.message || data?.error || "Falha ao executar OCR."] })
+            return
+          }
+        }
+
+        setResult({ success: 0, errors: [data?.error || "Falha ao analisar fatura."] })
         return
       }
 
-      setIsImporting(true)
+      const items = Array.isArray(data?.items) ? data.items : []
+      setPdfItems(items)
+      setPdfNeedsManual(!!data?.needsManual || items.length === 0)
+      setPdfRawText(typeof data?.rawText === "string" ? data.rawText : null)
+      setPdfStage("preview")
       setResult(null)
+    } catch (err: any) {
+      setResult({ success: 0, errors: [err?.message || "Falha ao analisar fatura."] })
+    } finally {
+      setIsImporting(false)
+    }
+  }
 
-      try {
-        const form = new FormData()
-        form.append("file", pdfFile)
-        form.append("cartao_id", cartaoId)
-        form.append("replicar_parcelas", replicarParcelas ? "1" : "0")
-        form.append("criar_categorias", criarCategorias ? "1" : "0")
+  const submitPdfItems = async () => {
+    if (!pdfFile || !cartaoId || !pdfItems) return
+    setIsImporting(true)
+    setResult(null)
+    try {
+      const form = new FormData()
+      form.append("cartao_id", cartaoId)
+      form.append("replicar_parcelas", replicarParcelas ? "1" : "0")
+      form.append("criar_categorias", criarCategorias ? "1" : "0")
+      form.append("items_json", JSON.stringify(pdfItems))
 
-        const res = await fetch("/api/import/cartao-fatura-pdf", {
-          method: "POST",
-          body: form,
-        })
-
-        const data = await res.json().catch(() => ({}))
-        if (!res.ok) {
-          setResult({ success: 0, errors: [data?.error || "Falha ao importar fatura."] })
-        } else {
-          setResult({ success: Number(data.inserted || 0), errors: [] })
-          setPdfSummary({
-            parsed: Number(data.parsed || 0),
-            generated: Number(data.generated || 0),
-            skippedAsDuplicate: Number(data.skippedAsDuplicate || 0),
-          })
-          if (Number(data.inserted || 0) > 0) router.refresh()
-        }
-      } catch (err: any) {
-        setResult({ success: 0, errors: [err?.message || "Falha ao importar fatura."] })
-      } finally {
-        setIsImporting(false)
-        setPdfFile(null)
-        if (pdfInputRef.current) pdfInputRef.current.value = ""
+      const res = await fetch("/api/import/cartao-fatura-pdf", { method: "POST", body: form })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        setResult({ success: 0, errors: [data?.error || "Falha ao importar fatura."] })
+        return
       }
+      setResult({ success: Number(data.inserted || 0), errors: [] })
+      setPdfSummary({
+        parsed: Number(data.parsed || 0),
+        generated: Number(data.generated || 0),
+        skippedAsDuplicate: Number(data.skippedAsDuplicate || 0),
+      })
+      setPdfStage("select")
+      setPdfItems(null)
+      setPdfFile(null)
+      if (pdfInputRef.current) pdfInputRef.current.value = ""
+      if (Number(data.inserted || 0) > 0) router.refresh()
+    } catch (err: any) {
+      setResult({ success: 0, errors: [err?.message || "Falha ao importar fatura."] })
+    } finally {
+      setIsImporting(false)
+    }
+  }
 
+  const handleImport = async () => {
+    if (!importType) return
+
+    // Importação de fatura PDF (preview -> revisão -> confirmar)
+    if (importType === "fatura_pdf") {
+      if (pdfStage === "preview" && pdfItems) {
+        await submitPdfItems()
+      } else {
+        await analyzePdf()
+      }
       return
     }
 
@@ -247,6 +329,10 @@ export function ImportButton({ userId }: ImportButtonProps) {
     setResult(null)
     setImportType(null)
     setPdfFile(null)
+    setPdfItems(null)
+    setPdfStage("select")
+    setPdfNeedsManual(false)
+    setPdfRawText(null)
     setPdfSummary(null)
     setCartaoId("")
     setReplicarParcelas(true)
@@ -367,41 +453,205 @@ export function ImportButton({ userId }: ImportButtonProps) {
                       </option>
                     ))}
                   </select>
-                  {cartoes.length === 0 && (
-                    <p className="text-xs text-muted-foreground">Nenhum cartão cadastrado ainda.</p>
-                  )}
+                  {cartoes.length === 0 && <p className="text-xs text-muted-foreground">Nenhum cartão cadastrado ainda.</p>}
                 </div>
 
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={replicarParcelas}
-                    onChange={(e) => setReplicarParcelas(e.target.checked)}
-                  />
-                  Replicar parcelas (gera 1 despesa por mês)
-                </label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-sm">Replicar parcelas (gera 1 despesa por mês)</Label>
+                  <Switch checked={replicarParcelas} onCheckedChange={(v) => setReplicarParcelas(!!v)} />
+                </div>
 
-                <label className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    checked={criarCategorias}
-                    onChange={(e) => setCriarCategorias(e.target.checked)}
-                  />
-                  Criar categorias automaticamente (quando não existir)
-                </label>
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-sm">Criar categorias automaticamente</Label>
+                  <Switch checked={criarCategorias} onCheckedChange={(v) => setCriarCategorias(!!v)} />
+                </div>
+
+                <div className="flex items-center justify-between gap-3">
+                  <Label className="text-sm">Executar OCR automaticamente (PDF escaneado)</Label>
+                  <Switch checked={autoOcr} onCheckedChange={(v) => setAutoOcr(!!v)} />
+                </div>
+
+                {isOcring && (
+                  <div className="space-y-2 pt-1">
+                    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                      <Wand2 className="h-4 w-4" />
+                      <span>Executando OCR…</span>
+                      <span className="ml-auto tabular-nums">{ocrProgress}%</span>
+                    </div>
+                    <Progress value={ocrProgress} />
+                    <p className="text-xs text-muted-foreground">
+                      Se o PDF tiver muitas páginas, o OCR pode levar um pouco (depende do seu PC).
+                    </p>
+                  </div>
+                )}
 
                 <p className="text-xs text-muted-foreground">
-                  Dica: para melhor resultado, exporte a fatura em PDF com texto selecionável.
+                  Fluxo recomendado: <strong>Analisar</strong> → revisar/ajustar lançamentos → <strong>Importar</strong>.
                 </p>
               </div>
 
+              {pdfStage === "preview" && pdfItems && (
+                <div className="space-y-2 rounded-lg border border-primary/20 p-4 bg-background/30">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium">Lançamentos identificados</p>
+                    <p className="text-xs text-muted-foreground">{pdfItems.length} itens</p>
+                  </div>
+
+                  {pdfNeedsManual && (
+                    <Alert>
+                      <AlertCircle className="h-4 w-4" />
+                      <AlertDescription>
+                        Não consegui identificar tudo automaticamente. Adicione/ajuste os lançamentos abaixo e clique em <strong>Importar</strong>.
+                      </AlertDescription>
+                    </Alert>
+                  )}
+
+                  <div className="flex items-center justify-between gap-2">
+                    <Button
+                      variant="outline"
+                      className="bg-transparent"
+                      onClick={() =>
+                        setPdfItems((prev) => [
+                          ...((prev || []) as any[]),
+                          {
+                            dataISO: new Date().toISOString().split("T")[0],
+                            descricao: "",
+                            valor: "",
+                          },
+                        ])
+                      }
+                      disabled={isImporting || isOcring}
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Adicionar lançamento
+                    </Button>
+
+                    {pdfRawText && (
+                      <p className="text-xs text-muted-foreground truncate max-w-[55%]">
+                        Dica: se precisar, use o texto extraído como referência (role para baixo).
+                      </p>
+                    )}
+                  </div>
+                  <ScrollArea className="h-56 rounded-md border border-primary/10">
+                    <Table>
+                      <TableHeader>
+                        <TableRow className="border-primary/20 hover:bg-transparent">
+                          <TableHead className="text-muted-foreground">Data</TableHead>
+                          <TableHead className="text-muted-foreground">Descrição</TableHead>
+                          <TableHead className="text-right text-muted-foreground">Valor</TableHead>
+                          <TableHead className="text-muted-foreground">Parcela</TableHead>
+                          <TableHead className="text-muted-foreground text-right">Ações</TableHead>
+                        </TableRow>
+                      </TableHeader>
+                      <TableBody>
+                        {pdfItems.map((it: any, idx: number) => (
+                          <TableRow key={idx} className="border-primary/10">
+                            <TableCell className="align-top">
+                              <Input
+                                value={it.dataISO || ""}
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  setPdfItems((prev) =>
+                                    (prev || []).map((x, i) => (i === idx ? { ...x, dataISO: v } : x))
+                                  )
+                                }}
+                                className="h-8"
+                                placeholder="YYYY-MM-DD"
+                              />
+                            </TableCell>
+                            <TableCell className="align-top">
+                              <Input
+                                value={it.descricao || ""}
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  setPdfItems((prev) =>
+                                    (prev || []).map((x, i) => (i === idx ? { ...x, descricao: v } : x))
+                                  )
+                                }}
+                                className="h-8"
+                                placeholder="Descrição"
+                              />
+                            </TableCell>
+                            <TableCell className="align-top">
+                              <Input
+                                value={String(it.valor ?? "")}
+                                onChange={(e) => {
+                                  const v = e.target.value
+                                  setPdfItems((prev) =>
+                                    (prev || []).map((x, i) => (i === idx ? { ...x, valor: v } : x))
+                                  )
+                                }}
+                                className="h-8 text-right"
+                                placeholder="0,00"
+                              />
+                            </TableCell>
+                            <TableCell className="align-top text-xs text-muted-foreground">
+                              {it.parcela_atual && it.parcela_total ? `${it.parcela_atual}/${it.parcela_total}` : "-"}
+                            </TableCell>
+
+                            <TableCell className="align-top text-right">
+                              <Button
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => setPdfItems((prev) => (prev || []).filter((_, i) => i !== idx))}
+                                disabled={isImporting || isOcring}
+                                title="Remover"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </ScrollArea>
+
+                  {pdfNeedsManual && pdfRawText && (
+                    <div className="space-y-1">
+                      <p className="text-xs text-muted-foreground">Texto extraído (referência):</p>
+                      <textarea
+                        className="w-full h-28 rounded-md bg-background border border-primary/20 px-3 py-2 text-xs"
+                        value={pdfRawText}
+                        readOnly
+                      />
+                    </div>
+                  )}
+                  <p className="text-xs text-muted-foreground">
+                    Você pode ajustar data/descrição/valor antes de integrar. Duplicidades são filtradas por hash.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-2">
-                <Button variant="outline" onClick={resetState} className="flex-1 bg-transparent">
-                  Cancelar
-                </Button>
-                <Button onClick={handleImport} className="flex-1 neon-glow" disabled={isImporting}>
-                  {isImporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
-                  Importar
+                {pdfStage === "preview" ? (
+                  <Button
+                    variant="outline"
+                    onClick={() => {
+                      setPdfStage("select")
+                      setPdfItems(null)
+                      setPdfNeedsManual(false)
+                      setPdfRawText(null)
+                    }}
+                    className="flex-1 bg-transparent"
+                    disabled={isImporting}
+                  >
+                    Voltar
+                  </Button>
+                ) : (
+                  <Button variant="outline" onClick={resetState} className="flex-1 bg-transparent" disabled={isImporting}>
+                    Cancelar
+                  </Button>
+                )}
+
+                <Button onClick={handleImport} className="flex-1 neon-glow" disabled={isImporting || isOcring}>
+                  {isImporting ? (
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  ) : pdfStage === "preview" ? (
+                    <Upload className="mr-2 h-4 w-4" />
+                  ) : (
+                    <Wand2 className="mr-2 h-4 w-4" />
+                  )}
+                  {pdfStage === "preview" ? "Importar" : "Analisar"}
                 </Button>
               </div>
             </>

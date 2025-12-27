@@ -2,6 +2,8 @@
 // Funciona tanto no cliente quanto no servidor
 
 import { getCryptoCotacao, getCryptoHistorica, getUSDtoBRL } from "./crypto-service"
+import { getAppBaseUrl } from "./base-url"
+import { fetchWithTimeout } from "@/lib/utils/fetch-timeout"
 
 const quoteCache = new Map<string, { data: UnifiedQuote; timestamp: number }>()
 const CACHE_TTL = 60 * 1000 // 1 minute
@@ -24,14 +26,7 @@ export interface UnifiedQuote {
 }
 
 function getBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    return "" // Client-side: use relative URL
-  }
-  // Server-side
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-  )
+  return getAppBaseUrl()
 }
 
 export async function getUnifiedQuote(
@@ -77,10 +72,13 @@ export async function getUnifiedQuote(
     const baseUrl = getBaseUrl()
     const url = `${baseUrl}/api/quotes?symbol=${encodeURIComponent(ticker)}&type=stock&currency=${currency}`
 
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10000),
-    })
+    const response = await fetchWithTimeout(
+      url,
+      {
+        cache: "no-store",
+      },
+      10_000
+    )
 
     if (!response.ok) {
       errorCache.set(cacheKey, Date.now())
@@ -143,10 +141,13 @@ export async function getHistoricalPrice(
       const baseUrl = getBaseUrl()
       const url = `${baseUrl}/api/quotes/historical?symbol=${encodeURIComponent(ticker)}&date=${date}&type=stock&currency=${currency}`
 
-      const response = await fetch(url, {
-        cache: "no-store",
-        signal: AbortSignal.timeout(15000),
-      })
+      const response = await fetchWithTimeout(
+        url,
+        {
+          cache: "no-store",
+        },
+        15_000
+      )
 
       if (response.ok) {
         const data = await response.json()

@@ -31,14 +31,7 @@ function FloatingOrb({
 function CurrencySymbol() {
   return (
     <Float speed={1.5} rotationIntensity={0.3} floatIntensity={1.5}>
-      <Text
-        font="/fonts/Inter_Bold.json"
-        fontSize={1.5}
-        color="#00e5ff"
-        anchorX="center"
-        anchorY="middle"
-        position={[0, 0, 0]}
-      >
+      <Text fontSize={1.5} color="#00e5ff" anchorX="center" anchorY="middle" position={[0, 0, 0]}>
         R$
         <meshStandardMaterial
           color="#00e5ff"
@@ -64,19 +57,15 @@ function Scene() {
       <pointLight position={[-10, -10, -10]} color="#a855f7" intensity={0.5} />
       <spotLight position={[0, 10, 0]} angle={0.3} penumbra={1} color="#00e5ff" intensity={1} />
 
-      {/* Main currency symbol */}
       <CurrencySymbol />
 
-      {/* Floating orbs representing financial elements */}
       <FloatingOrb position={[3, 1, -1]} color="#00e5ff" size={0.5} speed={1.2} />
       <FloatingOrb position={[-3, -1, 1]} color="#a855f7" size={0.4} speed={0.8} />
       <FloatingOrb position={[2, -2, 2]} color="#ec4899" size={0.3} speed={1.5} />
       <FloatingOrb position={[-2, 2, -2]} color="#22c55e" size={0.35} speed={1} />
       <FloatingOrb position={[0, 3, 0]} color="#00e5ff" size={0.25} speed={2} />
 
-      {/* Grid floor for depth */}
       <GridFloor />
-
       <Environment preset="night" />
     </>
   )
@@ -85,7 +74,11 @@ function Scene() {
 export function HeroScene() {
   return (
     <div className="w-full h-full rounded-2xl overflow-hidden glass">
-      <Canvas camera={{ position: [0, 0, 8], fov: 45 }}>
+      <Canvas
+        dpr={[1, 1.5]}
+        camera={{ position: [0, 0, 8], fov: 45 }}
+        gl={{ antialias: true, powerPreference: "high-performance" }}
+      >
         <Suspense fallback={null}>
           <Scene />
           <OrbitControls

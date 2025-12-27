@@ -20,6 +20,8 @@ import {
   TrendingUp,
   Landmark,
   LineChart,
+  Coins,
+  Link2,
 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { useState, useEffect, useCallback, useRef } from "react"
@@ -38,6 +40,8 @@ const navigation = [
   { name: "Renda Variavel", href: "/dashboard/investimentos/renda-variavel", icon: TrendingUp },
   { name: "Renda Fixa", href: "/dashboard/investimentos/renda-fixa", icon: Landmark },
   { name: "Investimentos", href: "/dashboard/investimentos/carteira", icon: LineChart },
+  { name: "Proventos", href: "/dashboard/proventos", icon: Coins },
+  { name: "Integracoes", href: "/dashboard/integracoes", icon: Link2 },
   { name: "Objetivos", href: "/dashboard/objetivos", icon: Target },
   { name: "Caixinhas", href: "/dashboard/caixinhas", icon: PiggyBank },
   { name: "Reserva", href: "/dashboard/reserva", icon: ShieldCheck },

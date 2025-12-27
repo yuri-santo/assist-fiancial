@@ -15,7 +15,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
-import { Trash2, Edit2, TrendingUp, Clock, Loader2, Eye } from "lucide-react"
+import { Trash2, Edit2, TrendingUp, Clock, Loader2, Eye, PlusCircle } from "lucide-react"
 import { formatCurrency, formatPercent } from "@/lib/utils/currency"
 import { TIPOS_RENDA_FIXA, INDEXADORES } from "@/lib/api/brapi"
 import type { RendaFixa } from "@/lib/types"
@@ -24,6 +24,7 @@ import { useRouter } from "next/navigation"
 import { motion, AnimatePresence } from "framer-motion"
 import { EditRendaFixaDialog } from "./edit-renda-fixa-dialog"
 import { RendaFixaDetailDialog } from "./renda-fixa-detail-dialog"
+import { ReinvestRendaFixaDialog } from "./reinvest-renda-fixa-dialog"
 
 interface RendaFixaListProps {
   investimentos: RendaFixa[]
@@ -33,6 +34,8 @@ export function RendaFixaList({ investimentos }: RendaFixaListProps) {
   const [deleteId, setDeleteId] = useState<string | null>(null)
   const [editInvestimento, setEditInvestimento] = useState<RendaFixa | null>(null)
   const [detailInvestimento, setDetailInvestimento] = useState<RendaFixa | null>(null)
+  const [reinvestInvestimento, setReinvestInvestimento] = useState<RendaFixa | null>(null)
+  const [isReinvestOpen, setIsReinvestOpen] = useState(false)
   const [isPending, startTransition] = useTransition()
   const router = useRouter()
 
@@ -168,6 +171,18 @@ export function RendaFixaList({ investimentos }: RendaFixaListProps) {
                             <Button
                               variant="ghost"
                               size="icon"
+                              onClick={() => {
+                                setReinvestInvestimento(inv)
+                                setIsReinvestOpen(true)
+                              }}
+                              className="text-muted-foreground hover:text-primary hover:bg-primary/10"
+                              title="Reinvestir / Aportar"
+                            >
+                              <PlusCircle className="h-4 w-4" />
+                            </Button>
+                            <Button
+                              variant="ghost"
+                              size="icon"
                               onClick={() => setEditInvestimento(inv)}
                               className="text-muted-foreground hover:text-primary hover:bg-primary/10"
                             >
@@ -228,6 +243,17 @@ export function RendaFixaList({ investimentos }: RendaFixaListProps) {
           investimento={detailInvestimento}
           open={!!detailInvestimento}
           onOpenChange={(open) => !open && setDetailInvestimento(null)}
+        />
+      )}
+
+      {reinvestInvestimento && (
+        <ReinvestRendaFixaDialog
+          investimento={reinvestInvestimento}
+          open={isReinvestOpen}
+          onOpenChange={(o) => {
+            setIsReinvestOpen(o)
+            if (!o) setReinvestInvestimento(null)
+          }}
         />
       )}
     </>

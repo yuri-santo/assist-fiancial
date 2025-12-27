@@ -18,7 +18,7 @@ export class CryptoStrategy implements QuoteStrategy {
     try {
       const cleanCoin = ticker.replace(/-USD|-BRL/gi, "").toUpperCase()
 
-      console.log(`[v0] [Crypto] Fetching ${cleanCoin} in USD first`)
+      console.log(`[Crypto] Fetching ${cleanCoin} in USD first`)
 
       const url = `${BRAPI_BASE_URL}/v2/crypto?coin=${cleanCoin}&currency=USD`
 
@@ -32,14 +32,14 @@ export class CryptoStrategy implements QuoteStrategy {
       })
 
       if (!response.ok) {
-        console.log(`[v0] [Crypto] Brapi error ${response.status}`)
+        console.log(`[Crypto] Brapi error ${response.status}`)
         return null
       }
 
       const data = await response.json()
 
       if (!data.coins || data.coins.length === 0) {
-        console.log(`[v0] [Crypto] No data for ${cleanCoin}`)
+        console.log(`[Crypto] No data for ${cleanCoin}`)
         return null
       }
 
@@ -53,10 +53,10 @@ export class CryptoStrategy implements QuoteStrategy {
         change = cryptoData.regularMarketChange * usdToBrl
 
         console.log(
-          `[v0] [Crypto] ${cleanCoin}: ${cryptoData.regularMarketPrice} USD → ${price.toFixed(2)} BRL (taxa: ${usdToBrl})`,
+          `[Crypto] ${cleanCoin}: ${cryptoData.regularMarketPrice} USD → ${price.toFixed(2)} BRL (taxa: ${usdToBrl})`,
         )
       } else {
-        console.log(`[v0] [Crypto] ${cleanCoin}: ${price} USD`)
+        console.log(`[Crypto] ${cleanCoin}: ${price} USD`)
       }
 
       return {
@@ -70,7 +70,7 @@ export class CryptoStrategy implements QuoteStrategy {
         timestamp: Date.now(),
       }
     } catch (error) {
-      console.error(`[v0] [Crypto] Exception:`, error)
+      console.error(`[Crypto] Exception:`, error)
       return null
     }
   }
@@ -81,13 +81,13 @@ export class CryptoStrategy implements QuoteStrategy {
     const daysDiff = Math.floor((now.getTime() - targetDate.getTime()) / (1000 * 60 * 60 * 24))
 
     if (daysDiff <= 7) {
-      console.log(`[v0] [Crypto] Using current price for recent date (${daysDiff} days ago)`)
+      console.log(`[Crypto] Using current price for recent date (${daysDiff} days ago)`)
       const quote = await this.getQuote(ticker, "crypto", currency)
       return quote?.price || null
     }
 
     // Brapi não oferece histórico de crypto, usar preço atual como fallback
-    console.log(`[v0] [Crypto] Historical data not available, using current price`)
+    console.log(`[Crypto] Historical data not available, using current price`)
     const quote = await this.getQuote(ticker, "crypto", currency)
     return quote?.price || null
   }
@@ -108,12 +108,12 @@ export class CryptoStrategy implements QuoteStrategy {
         const data = await response.json()
         if (data.currency && data.currency[0]?.bidPrice) {
           const rate = Number.parseFloat(data.currency[0].bidPrice)
-          console.log(`[v0] [Crypto] USD/BRL rate: ${rate}`)
+          console.log(`[Crypto] USD/BRL rate: ${rate}`)
           return rate
         }
       }
     } catch (error) {
-      console.log("[v0] [Crypto] Failed to get USD/BRL, using fallback")
+      console.log("[Crypto] Failed to get USD/BRL, using fallback")
     }
     return 5.8
   }

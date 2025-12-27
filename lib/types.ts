@@ -187,11 +187,48 @@ export interface Provento {
   user_id: string
   ticker: string
   tipo: "dividendo" | "jcp" | "rendimento" | "amortizacao"
+  // valor por cota/ação (unitário). O total pode ser calculado via quantidade_base.
   valor: number
+  // datas (todas no formato YYYY-MM-DD)
+  data_anuncio?: string | null
   data_com: string | null
   data_pagamento: string
+  // data provisionada pelo usuário (agenda pessoal)
+  data_provisionada?: string | null
+  status?: "provisionado" | "confirmado" | "pago" | null
   quantidade_base: number | null
   observacoes: string | null
+  fonte?: string | null
+  raw?: unknown
+  created_at: string
+}
+
+export interface BankConnection {
+  id: string
+  user_id: string
+  provider: "mercadopago" | "openfinance"
+  status: "connected" | "revoked" | "error"
+  access_token: string
+  refresh_token: string | null
+  expires_at: string | null
+  scope: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface BankTransaction {
+  id: string
+  user_id: string
+  provider: "mercadopago" | "openfinance"
+  external_id: string
+  direction: "debit" | "credit"
+  amount: number
+  currency: string
+  occurred_at: string
+  description: string | null
+  raw: unknown
+  imported: boolean
+  imported_at: string | null
   created_at: string
 }
 

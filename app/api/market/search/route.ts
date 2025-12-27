@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server"
+import { fetchWithTimeout } from "@/lib/utils/fetch-timeout"
 
 export const runtime = "nodejs"
 
@@ -19,11 +20,14 @@ export async function GET(req: NextRequest) {
 
   try {
     const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=${limit}&newsCount=0`
-    const res = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(8000),
-      headers: { Accept: "application/json" },
-    })
+    const res = await fetchWithTimeout(
+      url,
+      {
+        cache: "no-store",
+        headers: { Accept: "application/json" },
+      },
+      8000
+    )
 
     if (!res.ok) {
       return NextResponse.json({ results: [] }, { status: 200 })

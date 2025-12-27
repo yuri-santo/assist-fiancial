@@ -1,6 +1,9 @@
 // API gratuita para cotações de ações brasileiras
 // https://brapi.dev
 
+import { getAppBaseUrl } from "./base-url"
+import { fetchWithTimeout } from "@/lib/utils/fetch-timeout"
+
 const BRAPI_BASE_URL = "https://brapi.dev/api"
 const BRAPI_TOKEN = process.env.BRAPI_TOKEN || ""
 
@@ -38,13 +41,7 @@ export interface BrapiHistoricalPrice {
 }
 
 function getBaseUrl(): string {
-  if (typeof window !== "undefined") {
-    return ""
-  }
-  return (
-    process.env.NEXT_PUBLIC_APP_URL ||
-    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000")
-  )
+  return getAppBaseUrl()
 }
 
 export async function getCotacoes(tickers: string[]): Promise<BrapiQuote[]> {
@@ -70,10 +67,13 @@ export async function getCotacao(ticker: string): Promise<BrapiQuote | null> {
     const baseUrl = getBaseUrl()
     const url = `${baseUrl}/api/quotes?symbol=${encodeURIComponent(ticker)}&type=stock`
 
-    const response = await fetch(url, {
-      cache: "no-store",
-      signal: AbortSignal.timeout(10000),
-    })
+    const response = await fetchWithTimeout(
+      url,
+      {
+        cache: "no-store",
+      },
+      10_000
+    )
 
     if (!response.ok) return null
 

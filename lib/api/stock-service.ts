@@ -211,7 +211,7 @@ class BrapiProvider implements StockAPIProvider {
 
   async fetchQuote(ticker: string): Promise<StockQuote | null> {
     if (!BRAPI_TOKEN) {
-      console.log("[v0] Brapi: No token configured, skipping")
+      console.log("Brapi: No token configured, skipping")
       return null
     }
 
@@ -231,27 +231,26 @@ class BrapiProvider implements StockAPIProvider {
       })
 
       if (!response.ok) {
-        console.error(`[v0] Brapi API error: ${response.status} ${response.statusText}`)
+        console.error(`Brapi API error: ${response.status} ${response.statusText}`)
         const errorText = await response.text()
-        console.error(`[v0] Brapi error response:`, errorText)
+        console.error(`Brapi error response:`, errorText)
         return null
       }
 
       const data = await response.json()
 
       if (data.error) {
-        console.error(`[v0] Brapi API error response: ${data.message || data.error}`)
+        console.error(`Brapi API error response: ${data.message || data.error}`)
         return null
       }
 
       const result = data.results?.[0]
       if (!result) {
-        console.error("[v0] Brapi: No results returned")
+        console.error("Brapi: No results returned")
         return null
       }
 
-      console.log(`[v0] Brapi: Success for ${cleanTicker} - Price: ${result.regularMarketPrice}`)
-
+      console.log(`Brapi: Success for ${cleanTicker} - Price: ${result.regularMarketPrice}`)
       return {
         symbol: result.symbol,
         name: result.longName || result.shortName || cleanTicker,
@@ -318,7 +317,7 @@ class BrapiProvider implements StockAPIProvider {
         )
         .filter((p: HistoricalPrice) => p.close > 0)
     } catch (error) {
-      console.error(`[v0] ${this.name} Historical error:`, error)
+      console.error(`${this.name} Historical error:`, error)
       return []
     }
   }
@@ -418,7 +417,7 @@ class AlphaVantageProvider implements StockAPIProvider {
         source: this.name,
       }
     } catch (error) {
-      console.error(`[v0] ${this.name} error:`, error)
+      console.error(`${this.name} error:`, error)
       return null
     }
   }
@@ -461,7 +460,7 @@ class AlphaVantageProvider implements StockAPIProvider {
         .filter((p) => p.close > 0)
         .reverse()
     } catch (error) {
-      console.error(`[v0] ${this.name} Historical error:`, error)
+      console.error(`${this.name} Historical error:`, error)
       return []
     }
   }
@@ -506,7 +505,7 @@ class FinnhubProvider implements StockAPIProvider {
         source: this.name,
       }
     } catch (error) {
-      console.error(`[v0] ${this.name} error:`, error)
+      console.error(`${this.name} error:`, error)
       return null
     }
   }
@@ -532,7 +531,7 @@ class StockService {
     this.providers = allProviders.filter((p) => p.isAvailable()).sort((a, b) => a.priority - b.priority)
 
     console.log(
-      `[v0] Stock Service initialized with ${this.providers.length} providers:`,
+      `Stock Service initialized with ${this.providers.length} providers:`,
       this.providers.map((p) => p.name).join(", "),
     )
   }
@@ -540,18 +539,18 @@ class StockService {
   async getQuote(ticker: string): Promise<StockQuote | null> {
     for (const provider of this.providers) {
       try {
-        console.log(`[v0] Trying ${provider.name} for ${ticker}...`)
+        console.log(`Trying ${provider.name} for ${ticker}...`)
         const quote = await provider.fetchQuote(ticker)
         if (quote && quote.price > 0) {
-          console.log(`[v0] Success: Got quote from ${provider.name} for ${ticker} - Price: ${quote.price}`)
+          console.log(`Success: Got quote from ${provider.name} for ${ticker} - Price: ${quote.price}`)
           return quote
         }
-        console.log(`[v0] ${provider.name} returned no valid data for ${ticker}, trying next...`)
+        console.log(`${provider.name} returned no valid data for ${ticker}, trying next...`)
       } catch (error) {
-        console.error(`[v0] ${provider.name} failed for ${ticker}:`, error)
+        console.error(`${provider.name} failed for ${ticker}:`, error)
       }
     }
-    console.error(`[v0] All ${this.providers.length} APIs failed for ticker: ${ticker}`)
+    console.error(`All ${this.providers.length} APIs failed for ticker: ${ticker}`)
     return null
   }
 
@@ -563,11 +562,11 @@ class StockService {
       try {
         const prices = await provider.fetchHistorical(ticker, range)
         if (prices.length > 0) {
-          console.log(`[v0] Got ${prices.length} historical prices from ${provider.name} for ${ticker}`)
+          console.log(`Got ${prices.length} historical prices from ${provider.name} for ${ticker}`)
           return prices
         }
       } catch (error) {
-        console.error(`[v0] ${provider.name} historical failed for ${ticker}:`, error)
+        console.error(`${provider.name} historical failed for ${ticker}:`, error)
       }
     }
     return []
